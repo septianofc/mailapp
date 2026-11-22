@@ -5,6 +5,7 @@ import android.provider.Settings
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -14,9 +15,11 @@ import com.example.data.SecurityPreferencesRepository
 import com.example.security.AndroidDeviceSecurityInspector
 import com.example.security.DeviceIntegrityReport
 import com.example.security.DeviceSecurityInspector
+import com.example.security.NetworkStatus
 import com.example.ui.AppLockState
 import com.example.ui.MainViewModel
 import com.example.ui.components.AppLockScreen
+import com.example.ui.components.NetworkStatusBanner
 import com.example.ui.components.SecurityBlockedScreen
 import com.example.ui.components.SettingsSheetContent
 import com.example.ui.theme.MailSeptianSupportTheme
@@ -228,5 +231,47 @@ class SecurityAndUiRobolectricTest {
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("anti_screenshot_switch").performScrollTo().assertIsOff()
     composeTestRule.onNodeWithTag("app_lock_switch").performScrollTo().assertIsOff()
+  }
+
+  @Test
+  fun `network status banner renders offline unstable and recovered online messages`() {
+    composeTestRule.setContent {
+      MailSeptianSupportTheme {
+        NetworkStatusBanner(status = NetworkStatus.Offline, isRecovered = false)
+      }
+    }
+    composeTestRule.waitForIdle()
+    composeTestRule
+      .onNodeWithTag("network_status_indicator")
+      .assertIsDisplayed()
+      .assertTextContains("Offline", substring = true)
+  }
+
+  @Test
+  fun `network status banner renders unstable state`() {
+    composeTestRule.setContent {
+      MailSeptianSupportTheme {
+        NetworkStatusBanner(status = NetworkStatus.Unstable, isRecovered = false)
+      }
+    }
+    composeTestRule.waitForIdle()
+    composeTestRule
+      .onNodeWithTag("network_status_indicator")
+      .assertIsDisplayed()
+      .assertTextContains("kurang stabil", substring = true)
+  }
+
+  @Test
+  fun `network status banner renders recovered online state`() {
+    composeTestRule.setContent {
+      MailSeptianSupportTheme {
+        NetworkStatusBanner(status = NetworkStatus.Online, isRecovered = true)
+      }
+    }
+    composeTestRule.waitForIdle()
+    composeTestRule
+      .onNodeWithTag("network_status_indicator")
+      .assertIsDisplayed()
+      .assertTextContains("Kembali online", substring = true)
   }
 }

@@ -372,7 +372,7 @@ fun SecureWebViewContainer(
       visible = blockedNotice != null,
       enter = fadeIn(),
       exit = fadeOut(),
-      modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 20.dp, vertical = 24.dp),
+      modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 20.dp, vertical = 76.dp),
     ) {
       Surface(
         shape = RoundedCornerShape(14.dp),

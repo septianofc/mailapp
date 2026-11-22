@@ -7,8 +7,11 @@ import com.example.data.SecurityPreferencesRepository
 import com.example.security.AppLockCapability
 import com.example.security.DeviceIntegrityReport
 import com.example.security.DeviceSecurityInspector
+import com.example.security.NetworkStatus
+import com.example.security.NetworkStatusMonitor
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -51,6 +54,9 @@ data class MainUiState(
   val lastBlockedNotice: String? = null,
   val reloadTrigger: Int = 0,
   val unlockedWithoutDeviceLock: Boolean = false,
+  val networkStatus: NetworkStatus = NetworkStatus.Online,
+  val isNetworkBannerVisible: Boolean = false,
+  val isNetworkRecovered: Boolean = false,
 ) {
   /** Effective App Lock state: manual user preference if set, otherwise follows system capability. */
   val isAppLockEnabled: Boolean
@@ -64,12 +70,19 @@ class MainViewModel(
   private val preferencesRepository: SecurityPreferencesRepository,
   private val securityInspector: DeviceSecurityInspector,
   private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+  private val networkStatusMonitor: NetworkStatusMonitor? = null,
 ) : ViewModel() {
 
   private val _uiState = MutableStateFlow(MainUiState())
   val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
   private var lastCapability: AppLockCapability = AppLockCapability.NoCredentialEnrolled
+  private var networkBannerAutoHideJob: Job? = null
+  private var slowLoadCheckJob: Job? = null
+  private var hasShownInitialNetworkBanner = false
+  private var hasReceivedNetworkObservation = false
+  private var isPortalActive = false
+  private var markedUnstableBySlowWebLoad = false
 
   init {
     viewModelScope.launch {
@@ -87,6 +100,15 @@ class MainViewModel(
       }
     }
 
+    if (networkStatusMonitor != null) {
+      viewModelScope.launch {
+        networkStatusMonitor.observeStatus().collect { status ->
+          markedUnstableBySlowWebLoad = false
+          onNetworkStatusObserved(status)
+        }
+      }
+    }
+
     refreshDeviceIntegrity()
 
     viewModelScope.launch {
@@ -100,6 +122,106 @@ class MainViewModel(
       val report = withContext(ioDispatcher) { securityInspector.inspect() }
       _uiState.update { it.copy(deviceIntegrityReport = report) }
     }
+  }
+
+  fun onPortalVisibilityChanged(active: Boolean) {
+    isPortalActive = active
+    if (!active) return
+
+    val currentStatus = _uiState.value.networkStatus
+    if (!hasShownInitialNetworkBanner) {
+      hasShownInitialNetworkBanner = true
+      when (currentStatus) {
+        NetworkStatus.Offline -> {
+          networkBannerAutoHideJob?.cancel()
+          _uiState.update { it.copy(isNetworkBannerVisible = true) }
+        }
+        NetworkStatus.Online,
+        NetworkStatus.Unstable -> {
+          _uiState.update { it.copy(isNetworkBannerVisible = true) }
+          scheduleNetworkBannerAutoHide(expectedStatus = currentStatus)
+        }
+      }
+    } else if (currentStatus == NetworkStatus.Offline) {
+      networkBannerAutoHideJob?.cancel()
+      _uiState.update { it.copy(isNetworkBannerVisible = true) }
+    }
+  }
+
+  fun onNetworkStatusObserved(newStatus: NetworkStatus) {
+    val prevStatus = _uiState.value.networkStatus
+    if (!hasReceivedNetworkObservation) {
+      hasReceivedNetworkObservation = true
+      if (newStatus == prevStatus) {
+        if (newStatus == NetworkStatus.Offline) {
+          networkBannerAutoHideJob?.cancel()
+          _uiState.update { it.copy(isNetworkBannerVisible = true) }
+        }
+        return
+      }
+    } else if (newStatus == prevStatus) {
+      if (newStatus == NetworkStatus.Offline) {
+        networkBannerAutoHideJob?.cancel()
+        _uiState.update { it.copy(isNetworkBannerVisible = true) }
+      }
+      return
+    }
+
+    when (newStatus) {
+      NetworkStatus.Offline -> {
+        networkBannerAutoHideJob?.cancel()
+        _uiState.update {
+          it.copy(
+            networkStatus = NetworkStatus.Offline,
+            isNetworkBannerVisible = true,
+            isNetworkRecovered = false,
+          )
+        }
+      }
+      NetworkStatus.Unstable -> {
+        _uiState.update {
+          it.copy(
+            networkStatus = NetworkStatus.Unstable,
+            isNetworkBannerVisible = true,
+            isNetworkRecovered = false,
+          )
+        }
+        if (isPortalActive) {
+          hasShownInitialNetworkBanner = true
+          scheduleNetworkBannerAutoHide(expectedStatus = NetworkStatus.Unstable)
+        }
+      }
+      NetworkStatus.Online -> {
+        val recovered =
+          prevStatus == NetworkStatus.Offline || prevStatus == NetworkStatus.Unstable
+        _uiState.update {
+          it.copy(
+            networkStatus = NetworkStatus.Online,
+            isNetworkBannerVisible = true,
+            isNetworkRecovered = recovered,
+          )
+        }
+        if (isPortalActive) {
+          hasShownInitialNetworkBanner = true
+          scheduleNetworkBannerAutoHide(expectedStatus = NetworkStatus.Online)
+        }
+      }
+    }
+  }
+
+  private fun scheduleNetworkBannerAutoHide(expectedStatus: NetworkStatus) {
+    networkBannerAutoHideJob?.cancel()
+    networkBannerAutoHideJob =
+      viewModelScope.launch {
+        delay(NETWORK_BANNER_DURATION_MS)
+        _uiState.update { state ->
+          if (state.networkStatus == expectedStatus && state.networkStatus != NetworkStatus.Offline) {
+            state.copy(isNetworkBannerVisible = false)
+          } else {
+            state
+          }
+        }
+      }
   }
 
   fun updateAppLockCapability(capability: AppLockCapability) {
@@ -197,22 +319,42 @@ class MainViewModel(
 
   fun onWebPageStarted() {
     _uiState.update { it.copy(isWebLoading = true, webErrorState = WebErrorState.None) }
+    slowLoadCheckJob?.cancel()
+    slowLoadCheckJob =
+      viewModelScope.launch {
+        delay(SLOW_LOAD_THRESHOLD_MS)
+        if (_uiState.value.isWebLoading && _uiState.value.networkStatus == NetworkStatus.Online) {
+          markedUnstableBySlowWebLoad = true
+          onNetworkStatusObserved(NetworkStatus.Unstable)
+        }
+      }
   }
 
   fun onWebPageFinished() {
+    slowLoadCheckJob?.cancel()
     _uiState.update { it.copy(isWebLoading = false) }
+    if (markedUnstableBySlowWebLoad && _uiState.value.networkStatus == NetworkStatus.Unstable) {
+      markedUnstableBySlowWebLoad = false
+      onNetworkStatusObserved(NetworkStatus.Online)
+    }
   }
 
   fun onWebNetworkError(description: String) {
+    slowLoadCheckJob?.cancel()
     _uiState.update {
       it.copy(
         isWebLoading = false,
         webErrorState = WebErrorState.NetworkError(description),
       )
     }
+    if (_uiState.value.networkStatus == NetworkStatus.Online) {
+      markedUnstableBySlowWebLoad = true
+      onNetworkStatusObserved(NetworkStatus.Unstable)
+    }
   }
 
   fun onWebSslError() {
+    slowLoadCheckJob?.cancel()
     _uiState.update {
       it.copy(isWebLoading = false, webErrorState = WebErrorState.SslValidationError)
     }
@@ -243,17 +385,24 @@ class MainViewModel(
 
   companion object {
     const val SPLASH_DURATION_MS = 1100L
+    const val NETWORK_BANNER_DURATION_MS = 5000L
+    const val SLOW_LOAD_THRESHOLD_MS = 6000L
   }
 }
 
 class MainViewModelFactory(
   private val preferencesRepository: SecurityPreferencesRepository,
   private val securityInspector: DeviceSecurityInspector,
+  private val networkStatusMonitor: NetworkStatusMonitor? = null,
 ) : ViewModelProvider.Factory {
   @Suppress("UNCHECKED_CAST")
   override fun <T : ViewModel> create(modelClass: Class<T>): T {
     if (modelClass.isAssignableFrom(MainViewModel::class.java)) {
-      return MainViewModel(preferencesRepository, securityInspector) as T
+      return MainViewModel(
+        preferencesRepository = preferencesRepository,
+        securityInspector = securityInspector,
+        networkStatusMonitor = networkStatusMonitor,
+      ) as T
     }
     throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
   }

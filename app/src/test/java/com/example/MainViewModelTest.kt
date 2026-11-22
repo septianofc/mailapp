@@ -4,6 +4,8 @@ import com.example.data.SecurityPreferencesRepository
 import com.example.security.AppLockCapability
 import com.example.security.DeviceIntegrityReport
 import com.example.security.DeviceSecurityInspector
+import com.example.security.NetworkStatus
+import com.example.security.NetworkStatusMonitor
 import com.example.ui.AppLockState
 import com.example.ui.MainViewModel
 import com.example.ui.WebErrorState
@@ -60,6 +62,13 @@ class MainViewModelTest {
   private class FakeSecurityInspector(private var report: DeviceIntegrityReport) :
     DeviceSecurityInspector {
     override fun inspect(): DeviceIntegrityReport = report
+  }
+
+  private class FakeNetworkMonitor(initialStatus: NetworkStatus = NetworkStatus.Online) :
+    NetworkStatusMonitor {
+    val state = MutableStateFlow(initialStatus)
+
+    override fun observeStatus(): Flow<NetworkStatus> = state
   }
 
   @Test
@@ -170,5 +179,57 @@ class MainViewModelTest {
       vm.retryWebLoad()
       assertEquals(WebErrorState.None, vm.uiState.value.webErrorState)
       assertEquals(1, vm.uiState.value.reloadTrigger)
+    }
+
+  @Test
+  fun `network indicator stays visible while offline and auto-hides after 5s when online or unstable`() =
+    runTest(testDispatcher) {
+      val monitor = FakeNetworkMonitor(NetworkStatus.Online)
+      val vm =
+        MainViewModel(
+          FakePreferencesRepository(),
+          FakeSecurityInspector(DeviceIntegrityReport()),
+          testDispatcher,
+          monitor,
+        )
+
+      advanceTimeBy(MainViewModel.SPLASH_DURATION_MS + 10L)
+      vm.onPortalVisibilityChanged(true)
+
+      // Initial Online shows for 5 seconds then hides
+      assertEquals(NetworkStatus.Online, vm.uiState.value.networkStatus)
+      assertTrue(vm.uiState.value.isNetworkBannerVisible)
+      assertFalse(vm.uiState.value.isNetworkRecovered)
+
+      advanceTimeBy(MainViewModel.NETWORK_BANNER_DURATION_MS + 50L)
+      assertFalse(vm.uiState.value.isNetworkBannerVisible)
+
+      // Unstable shows for 5 seconds then hides
+      monitor.state.value = NetworkStatus.Unstable
+      advanceTimeBy(50L)
+      assertEquals(NetworkStatus.Unstable, vm.uiState.value.networkStatus)
+      assertTrue(vm.uiState.value.isNetworkBannerVisible)
+
+      advanceTimeBy(MainViewModel.NETWORK_BANNER_DURATION_MS + 50L)
+      assertFalse(vm.uiState.value.isNetworkBannerVisible)
+
+      // Offline remains continuously visible even well past 5 seconds
+      monitor.state.value = NetworkStatus.Offline
+      advanceTimeBy(50L)
+      assertEquals(NetworkStatus.Offline, vm.uiState.value.networkStatus)
+      assertTrue(vm.uiState.value.isNetworkBannerVisible)
+
+      advanceTimeBy(MainViewModel.NETWORK_BANNER_DURATION_MS * 3)
+      assertTrue(vm.uiState.value.isNetworkBannerVisible)
+
+      // Returning Online shows recovered message for 5 seconds then hides
+      monitor.state.value = NetworkStatus.Online
+      advanceTimeBy(50L)
+      assertEquals(NetworkStatus.Online, vm.uiState.value.networkStatus)
+      assertTrue(vm.uiState.value.isNetworkBannerVisible)
+      assertTrue(vm.uiState.value.isNetworkRecovered)
+
+      advanceTimeBy(MainViewModel.NETWORK_BANNER_DURATION_MS + 50L)
+      assertFalse(vm.uiState.value.isNetworkBannerVisible)
     }
 }

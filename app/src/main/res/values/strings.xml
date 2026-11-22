@@ -65,9 +65,20 @@
     <string name="webview_ssl_error_desc">Koneksi diblokir karena sertifikat SSL/TLS tidak lolos validasi keamanan ketat. Jangan lanjutkan pada jaringan yang tidak tepercaya.</string>
     <string name="webview_blocked_url_message">Navigasi diblokir: hanya HTTPS ke layanan resmi yang diizinkan.</string>
 
+    <!-- Network Status Indicator -->
+    <string name="network_status_offline">Offline • Tidak ada koneksi internet</string>
+    <string name="network_status_online">Online • Koneksi internet terhubung</string>
+    <string name="network_status_online_recovered">Kembali online • Koneksi pulih</string>
+    <string name="network_status_unstable">Jaringan kurang stabil</string>
+
     <!-- App Info -->
     <string name="about_section_title">Informasi Aplikasi &amp; Proteksi</string>
     <string name="about_host_value">HTTPS Terverifikasi</string>
     <string name="about_apk_protection">Rilis APK menggunakan R8 minification &amp; obfuscation serta penonaktifan log debug. Proteksi ini meningkatkan ketahanan analisis statis, namun tidak membuat APK mustahil didecompile.</string>
     <string name="close">Tutup</string>
+
+    <!-- Legacy compatibility strings if remote sync retains older files -->
+    <string name="warning_banner_title">Peringatan Keamanan Perangkat</string>
+    <string name="warning_banner_body">Perangkat terdeteksi memiliki kondisi yang dapat menurunkan keamanan aplikasi.</string>
+    <string name="details">Detail</string>
 </resources>

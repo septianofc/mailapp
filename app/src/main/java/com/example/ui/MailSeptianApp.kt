@@ -3,6 +3,8 @@ package com.example.ui
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -19,6 +21,7 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -26,6 +29,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.ui.components.AppLockScreen
+import com.example.ui.components.NetworkStatusBanner
 import com.example.ui.components.SecureWebViewContainer
 import com.example.ui.components.SecurityBlockedScreen
 import com.example.ui.components.SettingsSheet
@@ -37,6 +41,7 @@ import com.example.ui.theme.PureWhite
 @Composable
 fun MailSeptianApp(
   uiState: MainUiState,
+  onPortalVisibilityChanged: (Boolean) -> Unit = {},
   onTriggerBiometricUnlock: () -> Unit,
   onOpenDeviceSecuritySettings: () -> Unit,
   onOpenDeviceDeveloperSettings: () -> Unit,
@@ -56,6 +61,15 @@ fun MailSeptianApp(
   onClearBlockedNotice: () -> Unit,
   onRetryWebLoad: () -> Unit,
 ) {
+  val isPortalActive =
+    !uiState.showSplash &&
+      !uiState.deviceIntegrityReport.hasAnyWarning &&
+      (!uiState.isAppLockEnabled || uiState.appLockState is AppLockState.Unlocked)
+
+  LaunchedEffect(isPortalActive) {
+    onPortalVisibilityChanged(isPortalActive)
+  }
+
   Box(modifier = Modifier.fillMaxSize().background(PureWhite)) {
     when {
       uiState.showSplash -> {
@@ -83,7 +97,7 @@ fun MailSeptianApp(
           onExitApp = onExitApp,
         )
       }
-      // 3. Unlocked Full-Screen Native-Looking Portal + Bottom-Right Settings button
+      // 3. Unlocked Full-Screen Native-Looking Portal + Bottom Network Indicator + Bottom-Right Settings
       else -> {
         Box(
           modifier =
@@ -104,6 +118,21 @@ fun MailSeptianApp(
             onRetry = onRetryWebLoad,
             modifier = Modifier.fillMaxSize(),
           )
+
+          // Bottom Network Indicator (Offline stays visible; Online/Unstable auto-hide after 5s)
+          AnimatedVisibility(
+            visible = uiState.isNetworkBannerVisible,
+            enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+            modifier =
+              Modifier.align(Alignment.BottomStart)
+                .padding(start = 16.dp, end = 78.dp, bottom = 19.dp),
+          ) {
+            NetworkStatusBanner(
+              status = uiState.networkStatus,
+              isRecovered = uiState.isNetworkRecovered,
+            )
+          }
 
           // Bottom-Right floating Settings button
           Surface(

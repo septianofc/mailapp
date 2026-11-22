@@ -18,6 +18,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.DataStoreSecurityPreferencesRepository
 import com.example.security.AndroidDeviceSecurityInspector
+import com.example.security.AndroidNetworkMonitor
 import com.example.security.AppLockCapability
 import com.example.security.AppLockManager
 import com.example.ui.AppLockState
@@ -32,6 +33,7 @@ class MainActivity : FragmentActivity() {
     MainViewModelFactory(
       preferencesRepository = DataStoreSecurityPreferencesRepository(applicationContext),
       securityInspector = AndroidDeviceSecurityInspector(applicationContext),
+      networkStatusMonitor = AndroidNetworkMonitor(applicationContext),
     )
   }
 
@@ -96,6 +98,7 @@ class MainActivity : FragmentActivity() {
       MailSeptianSupportTheme {
         MailSeptianApp(
           uiState = uiState,
+          onPortalVisibilityChanged = { active -> viewModel.onPortalVisibilityChanged(active) },
           onTriggerBiometricUnlock = { launchBiometricPrompt() },
           onOpenDeviceSecuritySettings = { openDeviceSecuritySettings() },
           onOpenDeviceDeveloperSettings = { openDeveloperOrSystemSettings() },
