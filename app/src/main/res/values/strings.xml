@@ -9,9 +9,13 @@
     <string name="cd_open_settings">Buka pengaturan keamanan</string>
     <string name="cd_brand_logo">Logo Mail Septian Support</string>
     <string name="settings_title">Pengaturan Keamanan</string>
-    <string name="settings_subtitle">Perlindungan layar &amp; status integritas perangkat</string>
+    <string name="settings_subtitle">Perlindungan layar, kunci aplikasi &amp; integritas</string>
     <string name="anti_screenshot_title">Anti Screenshot</string>
     <string name="anti_screenshot_desc">Mengaktifkan FLAG_SECURE untuk memblokir tangkapan layar, perekaman layar, dan pratinjau Recent Apps.</string>
+    <string name="app_lock_setting_title">Kunci Sidik Jari / PIN</string>
+    <string name="app_lock_setting_desc">Kunci aplikasi menggunakan biometrik atau PIN/pola layar perangkat. Default mengikuti kunci layar sistem.</string>
+    <string name="app_lock_mode_system">Mengikuti Sistem</string>
+    <string name="app_lock_mode_custom">Kustom</string>
     <string name="status_on">AKTIF</string>
     <string name="status_off">NONAKTIF</string>
 
@@ -26,11 +30,6 @@
     <string name="blocked_open_settings">Buka Pengaturan Perangkat</string>
     <string name="blocked_recheck">Periksa Ulang Status</string>
     <string name="blocked_exit_app">Keluar Aplikasi</string>
-
-    <!-- Security Warning Banner -->
-    <string name="warning_banner_title">Peringatan Keamanan Perangkat</string>
-    <string name="warning_banner_body">Sistem mendeteksi kondisi keamanan berikut pada perangkat Anda: %1$s. Periksa pengaturan perangkat dan pastikan perangkat berada dalam kondisi aman.</string>
-    <string name="details">Lihat detail peringatan keamanan</string>
 
     <string name="flag_root_magisk">Root / Magisk / Superuser</string>
     <string name="flag_dev_options">Mode Opsi Pengembang Aktif</string>
@@ -52,13 +51,15 @@
     <string name="applock_continue_unprotected">Lanjutkan (Tanpa Kunci Layar)</string>
     <string name="applock_error_prefix">Autentikasi gagal: %1$s</string>
 
-    <!-- WebView States -->
-    <string name="webview_loading">Memuat halaman aman…</string>
-    <string name="webview_reloading">Menghubungkan kembali…</string>
-    <string name="webview_error_title">Koneksi Bermasalah</string>
+    <!-- Native Loading & Error States (never expose raw URLs) -->
+    <string name="webview_loading">Memuat layanan…</string>
+    <string name="webview_error_title">Layanan Tidak Dapat Dimuat</string>
     <string name="webview_error_disconnected">Tidak ada koneksi internet. Periksa Wi-Fi atau data seluler Anda, lalu tekan Muat Ulang.</string>
     <string name="webview_error_timeout">Waktu koneksi habis. Pastikan jaringan Anda stabil lalu coba kembali.</string>
-    <string name="webview_error_generic">Halaman tidak dapat dimuat saat ini karena gangguan jaringan atau server.</string>
+    <string name="webview_error_server">Server layanan sedang mengalami gangguan atau kendala koneksi aman. Silakan coba beberapa saat lagi.</string>
+    <string name="webview_error_not_found">Halaman layanan tidak ditemukan pada server saat ini.</string>
+    <string name="webview_error_forbidden">Akses ke halaman layanan ditolak oleh server saat ini.</string>
+    <string name="webview_error_generic">Layanan tidak dapat diakses saat ini karena gangguan jaringan atau server.</string>
     <string name="webview_error_retry">Muat Ulang</string>
     <string name="webview_ssl_error_title">Sertifikat SSL Tidak Valid</string>
     <string name="webview_ssl_error_desc">Koneksi diblokir karena sertifikat SSL/TLS tidak lolos validasi keamanan ketat. Jangan lanjutkan pada jaringan yang tidak tepercaya.</string>

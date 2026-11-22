@@ -22,6 +22,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.ScreenshotMonitor
 import androidx.compose.material.icons.rounded.Shield
@@ -43,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -67,8 +69,11 @@ import com.example.ui.theme.SoftWhiteBackground
 @Composable
 fun SettingsSheet(
   antiScreenshotEnabled: Boolean,
+  appLockEnabled: Boolean,
+  appLockFollowingSystem: Boolean,
   deviceIntegrityReport: DeviceIntegrityReport,
   onToggleAntiScreenshot: (Boolean) -> Unit,
+  onToggleAppLock: (Boolean) -> Unit,
   onDismiss: () -> Unit,
 ) {
   val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -82,8 +87,11 @@ fun SettingsSheet(
   ) {
     SettingsSheetContent(
       antiScreenshotEnabled = antiScreenshotEnabled,
+      appLockEnabled = appLockEnabled,
+      appLockFollowingSystem = appLockFollowingSystem,
       deviceIntegrityReport = deviceIntegrityReport,
       onToggleAntiScreenshot = onToggleAntiScreenshot,
+      onToggleAppLock = onToggleAppLock,
       onDismiss = onDismiss,
     )
   }
@@ -92,8 +100,11 @@ fun SettingsSheet(
 @Composable
 fun SettingsSheetContent(
   antiScreenshotEnabled: Boolean,
+  appLockEnabled: Boolean,
+  appLockFollowingSystem: Boolean,
   deviceIntegrityReport: DeviceIntegrityReport,
   onToggleAntiScreenshot: (Boolean) -> Unit,
+  onToggleAppLock: (Boolean) -> Unit,
   onDismiss: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -170,79 +181,45 @@ fun SettingsSheetContent(
     }
 
     Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
-      // ONLY changeable user option: Anti Screenshot (FLAG_SECURE)
-      Surface(
-        shape = RoundedCornerShape(18.dp),
-        color = BrandBlueSoftContainer.copy(alpha = 0.55f),
-        border = BorderStroke(1.dp, BrandBlueBorder.copy(alpha = 0.7f)),
-        modifier = Modifier.fillMaxWidth(),
-      ) {
-        Row(
-          verticalAlignment = Alignment.CenterVertically,
-          modifier = Modifier.fillMaxWidth().padding(16.dp),
-        ) {
-          Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = BrandBluePrimary,
-            shadowElevation = 2.dp,
-            modifier = Modifier.size(44.dp),
-          ) {
-            Box(contentAlignment = Alignment.Center) {
-              Icon(
-                imageVector = Icons.Rounded.ScreenshotMonitor,
-                contentDescription = null,
-                tint = PureWhite,
-                modifier = Modifier.size(22.dp),
-              )
-            }
-          }
-          Spacer(modifier = Modifier.width(14.dp))
-          Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-              Text(
-                text = stringResource(id = R.string.anti_screenshot_title),
-                style = MaterialTheme.typography.titleMedium,
-                color = BrandBlueDark,
-              )
-              Spacer(modifier = Modifier.width(8.dp))
-              Surface(
-                shape = RoundedCornerShape(50),
-                color = if (antiScreenshotEnabled) BrandBluePrimary else SlateBorder,
-              ) {
-                Text(
-                  text =
-                    stringResource(
-                      id = if (antiScreenshotEnabled) R.string.status_on else R.string.status_off
-                    ),
-                  style = MaterialTheme.typography.labelMedium,
-                  color = PureWhite,
-                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                )
+      // Option 1: Anti Screenshot (FLAG_SECURE)
+      SettingToggleCard(
+        icon = Icons.Rounded.ScreenshotMonitor,
+        title = stringResource(id = R.string.anti_screenshot_title),
+        description = stringResource(id = R.string.anti_screenshot_desc),
+        badgeText =
+          stringResource(
+            id = if (antiScreenshotEnabled) R.string.status_on else R.string.status_off
+          ),
+        secondaryBadgeText = null,
+        checked = antiScreenshotEnabled,
+        onCheckedChange = onToggleAntiScreenshot,
+        switchTestTag = "anti_screenshot_switch",
+      )
+
+      Spacer(modifier = Modifier.height(12.dp))
+
+      // Option 2: Fingerprint / PIN App Lock (default follows system)
+      SettingToggleCard(
+        icon = Icons.Rounded.Fingerprint,
+        title = stringResource(id = R.string.app_lock_setting_title),
+        description = stringResource(id = R.string.app_lock_setting_desc),
+        badgeText =
+          stringResource(
+            id = if (appLockEnabled) R.string.status_on else R.string.status_off
+          ),
+        secondaryBadgeText =
+          stringResource(
+            id =
+              if (appLockFollowingSystem) {
+                R.string.app_lock_mode_system
+              } else {
+                R.string.app_lock_mode_custom
               }
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-              text = stringResource(id = R.string.anti_screenshot_desc),
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-          }
-          Spacer(modifier = Modifier.width(12.dp))
-          Switch(
-            checked = antiScreenshotEnabled,
-            onCheckedChange = onToggleAntiScreenshot,
-            colors =
-              SwitchDefaults.colors(
-                checkedThumbColor = PureWhite,
-                checkedTrackColor = BrandBluePrimary,
-                uncheckedThumbColor = PureWhite,
-                uncheckedTrackColor = SlateBorder,
-                uncheckedBorderColor = SlateBorder,
-              ),
-            modifier = Modifier.testTag("anti_screenshot_switch"),
-          )
-        }
-      }
+          ),
+        checked = appLockEnabled,
+        onCheckedChange = onToggleAppLock,
+        switchTestTag = "app_lock_switch",
+      )
 
       Spacer(modifier = Modifier.height(20.dp))
 
@@ -366,6 +343,105 @@ fun SettingsSheetContent(
           )
         }
       }
+    }
+  }
+}
+
+@Composable
+private fun SettingToggleCard(
+  icon: ImageVector,
+  title: String,
+  description: String,
+  badgeText: String,
+  secondaryBadgeText: String?,
+  checked: Boolean,
+  onCheckedChange: (Boolean) -> Unit,
+  switchTestTag: String,
+) {
+  Surface(
+    shape = RoundedCornerShape(18.dp),
+    color = BrandBlueSoftContainer.copy(alpha = 0.55f),
+    border = BorderStroke(1.dp, BrandBlueBorder.copy(alpha = 0.7f)),
+    modifier = Modifier.fillMaxWidth(),
+  ) {
+    Row(
+      verticalAlignment = Alignment.CenterVertically,
+      modifier = Modifier.fillMaxWidth().padding(16.dp),
+    ) {
+      Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = BrandBluePrimary,
+        shadowElevation = 2.dp,
+        modifier = Modifier.size(44.dp),
+      ) {
+        Box(contentAlignment = Alignment.Center) {
+          Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = PureWhite,
+            modifier = Modifier.size(22.dp),
+          )
+        }
+      }
+      Spacer(modifier = Modifier.width(14.dp))
+      Column(modifier = Modifier.weight(1f)) {
+        Text(
+          text = title,
+          style = MaterialTheme.typography.titleMedium,
+          color = BrandBlueDark,
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(
+          horizontalArrangement = Arrangement.spacedBy(6.dp),
+          verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Surface(
+            shape = RoundedCornerShape(50),
+            color = if (checked) BrandBluePrimary else SlateBorder,
+          ) {
+            Text(
+              text = badgeText,
+              style = MaterialTheme.typography.labelMedium,
+              color = PureWhite,
+              modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+            )
+          }
+          if (!secondaryBadgeText.isNullOrBlank()) {
+            Surface(
+              shape = RoundedCornerShape(50),
+              color = PureWhite,
+              border = BorderStroke(1.dp, BrandBlueBorder),
+            ) {
+              Text(
+                text = secondaryBadgeText,
+                style = MaterialTheme.typography.labelMedium,
+                color = BrandBlueDark,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+              )
+            }
+          }
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+          text = description,
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      }
+      Spacer(modifier = Modifier.width(12.dp))
+      Switch(
+        checked = checked,
+        onCheckedChange = onCheckedChange,
+        colors =
+          SwitchDefaults.colors(
+            checkedThumbColor = PureWhite,
+            checkedTrackColor = BrandBluePrimary,
+            uncheckedThumbColor = PureWhite,
+            uncheckedTrackColor = SlateBorder,
+            uncheckedBorderColor = SlateBorder,
+          ),
+        modifier = Modifier.testTag(switchTestTag),
+      )
     }
   }
 }

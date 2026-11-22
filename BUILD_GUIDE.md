@@ -8,28 +8,29 @@
 
 ---
 
-## 2. Build via Android Studio
-1. Buka folder project ini di **Android Studio** (JDK 17 direkomendasikan).
-2. Tunggu Gradle Sync selesai.
-3. Pilih build variant:
-   - **`debug`** untuk pengujian harian (logging debug aktif hanya di build debug).
-   - **`release`** untuk produksi (R8 minification, resource shrinking, obfuscation, dan penghapusan log aktif).
-4. Untuk membuat APK Debug: **Build > Build Bundle(s) / APK(s) > Build APK(s)**.
-   Output berada di: `app/build/outputs/apk/debug/app-debug.apk`.
+## 2. Mode Release & Build Otomatis (GitHub Actions)
+Workflow CI pada `.github/workflows/build-apk.yml` kini langsung membuild dan menandatangani **APK Release** (`:app:assembleRelease`) dengan R8 minification, resource shrinking, obfuscation, dan penghapusan log (`ENABLE_LOGS = false`):
+
+1. Push repository ke GitHub (branch `main` atau `master`), atau jalankan manual dari tab **Actions > Build Mail Septian Support APK > Run workflow**.
+2. Runner CI akan otomatis:
+   - Menjalankan seluruh unit test & Robolectric UI test (`:app:testDebugUnitTest`).
+   - Menyiapkan keystore penandatanganan Release secara otomatis:
+     - Jika Anda sudah mengisi GitHub Secrets (`KEYSTORE_BASE64`, `STORE_PASSWORD`, `KEY_PASSWORD` dengan `keyAlias = upload`), CI menggunakan keystore permanen tersebut agar update APK berikutnya bisa menimpa versi sebelumnya.
+     - Jika GitHub Secrets belum diisi, CI otomatis membuat keystore PKCS12 sementara di runner (`$RUNNER_TEMP`) menggunakan `keytool` + password acak sehingga Anda tidak perlu membuat keystore manual.
+   - Membuild dan menandatangani `app/build/outputs/apk/release/app-release.apk`.
+3. Unduh artifact **`Mail-Septian-Support-MSFR_RATNA_2245-release-apk`** dari hasil run Actions.
+4. **Penting saat instalasi di HP:**
+   - GitHub Actions membungkus artifact dalam file `.zip` — **ekstrak `.zip` terlebih dahulu** lalu instal file `app-release.apk` di dalamnya.
+   - Jika sebelumnya pernah menginstal versi **Debug**, **uninstall versi Debug terlebih dahulu** sebelum menginstal APK Release agar tidak terjadi konflik tanda tangan aplikasi.
 
 ---
 
-## 3. Build & Uji via Terminal (Gradle CLI)
+## 3. Build & Uji Lokal (Gradle CLI)
 - **Menjalankan Unit & Robolectric Tests:**
   ```bash
   gradle :app:testDebugUnitTest
   ```
-- **Membuat APK Debug:**
-  ```bash
-  gradle :app:assembleDebug
-  ```
-  Lokasi APK: `app/build/outputs/apk/debug/app-debug.apk`
-- **Membuat APK Release (memerlukan environment keystore):**
+- **Membuat APK Release Tertandatangani:**
   ```bash
   KEYSTORE_PATH=/path/to/keystore.jks STORE_PASSWORD=... KEY_PASSWORD=... gradle :app:assembleRelease
   ```
@@ -37,17 +38,9 @@
 
 ---
 
-## 4. Build Otomatis di GitHub Workspace / GitHub Actions
-Workflow CI sudah disiapkan pada `.github/workflows/build-apk.yml`.
-1. Push seluruh project ke repository GitHub Anda (branch `main` atau `master`).
-2. Buka tab **Actions** di GitHub, lalu pilih workflow **Build Mail Septian Support APK** (dapat juga dijalankan manual lewat **Run workflow**).
-3. Setelah selesai, unduh file **Mail-Septian-Support-MSFR_RATNA_2245-debug-apk** dari bagian **Artifacts**.
-
----
-
-## 5. Catatan Arsitektur Keamanan (Transparan)
-- **Anti Screenshot (`FLAG_SECURE`):** Satu-satunya opsi yang dapat diubah pengguna pada panel Pengaturan di pojok kiri atas, disimpan persisten menggunakan Jetpack DataStore.
-- **Deteksi Perangkat (Otomatis, Tanpa Toggle):** Memeriksa indikator root/Magisk/superuser, Developer Options, dan USB Debugging secara otomatis. Deteksi sisi klien ini bersifat heuristik dan **tidak menjamin akurasi 100%**.
-- **App Lock:** Menggunakan AndroidX `BiometricPrompt` dengan dukungan biometrik dan `DEVICE_CREDENTIAL` (PIN/pola/password layar kunci OS) tanpa menyimpan PIN plaintext di aplikasi.
-- **WebView Security:** Allowlist ketat host `septianfr.web.id` via HTTPS, memblokir HTTP, menonaktifkan `allowFileAccess`/`allowContentAccess`/mixed content, menolak SSL error (`handler.cancel()`), tanpa JavaScript bridge, dan cookie pihak pertama saja.
-- **Proteksi APK:** Build release menggunakan R8 shrinking, minification, obfuscation, serta penghapusan log debug (`-assumenosideeffects`). Langkah ini menyulitkan analisis statis, namun **tidak membuat APK mustahil untuk didecompile**.
+## 4. Ringkasan Arsitektur Keamanan
+- **Anti Screenshot (`FLAG_SECURE`):** Tersedia di panel Pengaturan (pojok kanan bawah), disimpan persisten menggunakan Jetpack DataStore.
+- **Kunci Sidik Jari / PIN (`BiometricPrompt`):** Mendukung toggle ON/OFF di panel Pengaturan dengan nilai bawaan **mengikuti pengaturan kunci layar sistem**. Menggunakan autentikasi biometrik & `DEVICE_CREDENTIAL` tanpa menyimpan PIN plaintext. Membatalkan prompt atau menekan Keluar akan menutup aplikasi.
+- **Blokir Otomatis Integritas Perangkat (Tanpa Toggle):** Memeriksa indikator root/Magisk/superuser, Developer Options, dan USB Debugging secara otomatis. Jika aktif, aplikasi menampilkan halaman blokir penuh (*Akses Aplikasi Diblokir*). Deteksi sisi klien bersifat heuristik dan **tidak mengklaim akurasi 100%**.
+- **WebView Tanpa Jejak Browser:** Allowlist ketat host `septianfr.web.id` via HTTPS, memblokir HTTP, menonaktifkan `allowFileAccess`/`allowContentAccess`/mixed content, menolak SSL error (`handler.cancel()`), tanpa JavaScript bridge, cookie pihak pertama saja, tanpa progress bar atas, dan seluruh error jaringan/HTTP/server/SSL/Cloudflare ditangani overlay native tanpa mengekspos URL mentah.
+- **Proteksi APK Release:** R8 shrinking, minification, obfuscation, serta penghapusan log debug (`-assumenosideeffects`). Langkah ini menyulitkan analisis statis, namun **tidak membuat APK mustahil untuk didecompile**.

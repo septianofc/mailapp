@@ -45,9 +45,9 @@ fun MailSeptianApp(
   onContinueWithoutCredential: () -> Unit,
   onExitApp: () -> Unit,
   onToggleAntiScreenshot: (Boolean) -> Unit,
+  onToggleAppLock: (Boolean) -> Unit,
   onOpenSettings: () -> Unit,
   onCloseSettings: () -> Unit,
-  onWebProgressChanged: (Int) -> Unit,
   onWebPageStarted: () -> Unit,
   onWebPageFinished: () -> Unit,
   onWebNetworkError: (String) -> Unit,
@@ -71,8 +71,8 @@ fun MailSeptianApp(
           onExitApp = onExitApp,
         )
       }
-      // 2. App Lock gate
-      uiState.appLockState !is AppLockState.Unlocked -> {
+      // 2. App Lock gate (active when enabled by user or system default)
+      uiState.isAppLockEnabled && uiState.appLockState !is AppLockState.Unlocked -> {
         AppLockScreen(
           appLockState = uiState.appLockState,
           authErrorMessage = uiState.authErrorMessage,
@@ -83,7 +83,7 @@ fun MailSeptianApp(
           onExitApp = onExitApp,
         )
       }
-      // 3. Unlocked Full-Screen WebView Workspace + Bottom-Right Settings button
+      // 3. Unlocked Full-Screen Native-Looking Portal + Bottom-Right Settings button
       else -> {
         Box(
           modifier =
@@ -92,12 +92,9 @@ fun MailSeptianApp(
               .imePadding()
         ) {
           SecureWebViewContainer(
-            webProgress = uiState.webProgress,
-            isWebLoading = uiState.isWebLoading,
             webErrorState = uiState.webErrorState,
             reloadTrigger = uiState.reloadTrigger,
             blockedNotice = uiState.lastBlockedNotice,
-            onProgressChanged = onWebProgressChanged,
             onPageStarted = onWebPageStarted,
             onPageFinished = onWebPageFinished,
             onNetworkError = onWebNetworkError,
@@ -108,7 +105,7 @@ fun MailSeptianApp(
             modifier = Modifier.fillMaxSize(),
           )
 
-          // Bottom-Right floating Settings button (avoids top website controls)
+          // Bottom-Right floating Settings button
           Surface(
             onClick = onOpenSettings,
             shape = CircleShape,
@@ -143,12 +140,15 @@ fun MailSeptianApp(
       SplashOverlay()
     }
 
-    // Settings Sheet (only editable when device is clean and unlocked)
+    // Settings Sheet
     if (uiState.isSettingsOpen && !uiState.deviceIntegrityReport.hasAnyWarning) {
       SettingsSheet(
         antiScreenshotEnabled = uiState.antiScreenshotEnabled,
+        appLockEnabled = uiState.isAppLockEnabled,
+        appLockFollowingSystem = uiState.isAppLockFollowingSystem,
         deviceIntegrityReport = uiState.deviceIntegrityReport,
         onToggleAntiScreenshot = onToggleAntiScreenshot,
+        onToggleAppLock = onToggleAppLock,
         onDismiss = onCloseSettings,
       )
     }

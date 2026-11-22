@@ -7,8 +7,8 @@ import android.os.Build
 import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.SslErrorHandler
-import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -20,7 +20,9 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +34,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CloudOff
@@ -43,7 +46,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -56,8 +58,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -80,12 +85,9 @@ import java.io.ByteArrayInputStream
 
 @Composable
 fun SecureWebViewContainer(
-  webProgress: Int,
-  isWebLoading: Boolean,
   webErrorState: WebErrorState,
   reloadTrigger: Int,
   blockedNotice: String?,
-  onProgressChanged: (Int) -> Unit,
   onPageStarted: () -> Unit,
   onPageFinished: () -> Unit,
   onNetworkError: (String) -> Unit,
@@ -100,14 +102,18 @@ fun SecureWebViewContainer(
   var canGoBack by remember { mutableStateOf(false) }
   var lastValidUrl by remember { mutableStateOf(WebViewUrlPolicy.ENTRY_URL) }
 
-  // Keeps WebView invisible on error and during reload so Chromium's built-in
-  // error page (which exposes the URL) is never visible to the user.
+  // Keeps WebView invisible until a valid HTTP 2xx/3xx page renders cleanly.
+  // Any network, HTTP >= 400 (including Cloudflare 525 / ERR_HTTP_RESPONSE_CODE_FAILURE),
+  // or SSL error immediately masks the WebView behind native UI so no browser chrome or URL is exposed.
   var isPageVisible by remember { mutableStateOf(false) }
   var currentLoadHadError by remember { mutableStateOf(false) }
 
   val blockedMessage = stringResource(id = R.string.webview_blocked_url_message)
   val disconnectedMsg = stringResource(id = R.string.webview_error_disconnected)
   val timeoutMsg = stringResource(id = R.string.webview_error_timeout)
+  val serverErrorMsg = stringResource(id = R.string.webview_error_server)
+  val notFoundMsg = stringResource(id = R.string.webview_error_not_found)
+  val forbiddenMsg = stringResource(id = R.string.webview_error_forbidden)
   val genericErrorMsg = stringResource(id = R.string.webview_error_generic)
 
   BackHandler(enabled = canGoBack) {
@@ -159,16 +165,12 @@ fun SecureWebViewContainer(
               ViewGroup.LayoutParams.MATCH_PARENT,
             )
           visibility = View.INVISIBLE
+          isVerticalScrollBarEnabled = false
+          isHorizontalScrollBarEnabled = false
+          overScrollMode = View.OVER_SCROLL_NEVER
 
           configureHardenedSettings(this)
           configureSecureCookies(this)
-
-          webChromeClient =
-            object : WebChromeClient() {
-              override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                onProgressChanged(newProgress)
-              }
-            }
 
           webViewClient =
             object : WebViewClient() {
@@ -217,6 +219,8 @@ fun SecureWebViewContainer(
                   lastValidUrl = url
                 }
                 currentLoadHadError = false
+                isPageVisible = false
+                view?.visibility = View.INVISIBLE
                 canGoBack = view?.canGoBack() == true
                 onPageStarted()
               }
@@ -228,6 +232,9 @@ fun SecureWebViewContainer(
                   view?.visibility = View.VISIBLE
                   isPageVisible = true
                   onPageFinished()
+                } else {
+                  view?.visibility = View.INVISIBLE
+                  isPageVisible = false
                 }
               }
 
@@ -243,16 +250,40 @@ fun SecureWebViewContainer(
 
                   val errorCode = error?.errorCode ?: ERROR_UNKNOWN
                   val rawDesc = error?.description?.toString().orEmpty()
-                  SafeLogger.w("WebView main-frame network error code=$errorCode")
+                  SafeLogger.w("WebView main-frame error code=$errorCode")
 
                   val friendlyMessage =
-                    mapFriendlyErrorMessage(
+                    mapFriendlyNetworkErrorMessage(
                       errorCode = errorCode,
                       rawDescription = rawDesc,
                       disconnectedMsg = disconnectedMsg,
                       timeoutMsg = timeoutMsg,
+                      serverErrorMsg = serverErrorMsg,
                       genericMsg = genericErrorMsg,
                     )
+                  onNetworkError(friendlyMessage)
+                }
+              }
+
+              override fun onReceivedHttpError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                errorResponse: WebResourceResponse?,
+              ) {
+                val statusCode = errorResponse?.statusCode ?: 0
+                if (request?.isForMainFrame == true && statusCode >= 400) {
+                  currentLoadHadError = true
+                  isPageVisible = false
+                  view?.visibility = View.INVISIBLE
+                  SafeLogger.w("WebView main-frame HTTP error status=$statusCode")
+
+                  val friendlyMessage =
+                    when (statusCode) {
+                      401, 403 -> forbiddenMsg
+                      404 -> notFoundMsg
+                      in 500..599 -> serverErrorMsg
+                      else -> genericErrorMsg
+                    }
                   onNetworkError(friendlyMessage)
                 }
               }
@@ -270,6 +301,17 @@ fun SecureWebViewContainer(
                 SafeLogger.w("Strict SSL validation rejected certificate error=${error?.primaryError}")
                 onSslError()
               }
+
+              override fun onRenderProcessGone(
+                view: WebView?,
+                detail: RenderProcessGoneDetail?,
+              ): Boolean {
+                currentLoadHadError = true
+                isPageVisible = false
+                view?.visibility = View.INVISIBLE
+                onNetworkError(genericErrorMsg)
+                return true
+              }
             }
 
           loadUrl(WebViewUrlPolicy.ENTRY_URL)
@@ -283,7 +325,7 @@ fun SecureWebViewContainer(
       },
     )
 
-    // Opaque loading veil before initial render or while reconnecting after error
+    // Native branded loading state (no browser-style top progress bar)
     AnimatedVisibility(
       visible = !isPageVisible && webErrorState is WebErrorState.None,
       enter = fadeIn(),
@@ -291,16 +333,31 @@ fun SecureWebViewContainer(
       modifier = Modifier.fillMaxSize(),
     ) {
       Box(
-        modifier = Modifier.fillMaxSize().background(PureWhite),
+        modifier = Modifier.fillMaxSize().background(PureWhite).testTag("native_loading_overlay"),
         contentAlignment = Alignment.Center,
       ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
+          Surface(
+            shape = CircleShape,
+            color = PureWhite,
+            shadowElevation = 6.dp,
+            modifier = Modifier.size(72.dp).border(2.dp, BrandBluePrimary, CircleShape),
+          ) {
+            Image(
+              painter = painterResource(id = R.drawable.brand_logo),
+              contentDescription = stringResource(id = R.string.cd_brand_logo),
+              contentScale = ContentScale.Crop,
+              modifier = Modifier.fillMaxSize().padding(3.dp).clip(CircleShape),
+            )
+          }
+          Spacer(modifier = Modifier.height(18.dp))
           CircularProgressIndicator(
             color = BrandBluePrimary,
             trackColor = BrandBlueSoftContainer,
-            modifier = Modifier.size(40.dp),
+            strokeWidth = 3.dp,
+            modifier = Modifier.size(32.dp),
           )
-          Spacer(modifier = Modifier.height(14.dp))
+          Spacer(modifier = Modifier.height(12.dp))
           Text(
             text = context.getString(R.string.webview_loading),
             style = MaterialTheme.typography.bodyMedium,
@@ -308,21 +365,6 @@ fun SecureWebViewContainer(
           )
         }
       }
-    }
-
-    // Slim top progress indicator while loading
-    AnimatedVisibility(
-      visible = isWebLoading && webErrorState is WebErrorState.None,
-      enter = fadeIn(),
-      exit = fadeOut(),
-      modifier = Modifier.align(Alignment.TopCenter),
-    ) {
-      LinearProgressIndicator(
-        progress = { (webProgress.coerceIn(0, 100)) / 100f },
-        color = BrandBluePrimary,
-        trackColor = BrandBlueSoftContainer,
-        modifier = Modifier.fillMaxWidth().height(3.dp).testTag("webview_progress_bar"),
-      )
     }
 
     // Blocked navigation feedback pill
@@ -348,7 +390,7 @@ fun SecureWebViewContainer(
       }
     }
 
-    // Full error overlay for network or strict SSL validation errors (never displays URL)
+    // Full native error overlay for all HTTP, network, Cloudflare, or SSL errors
     if (webErrorState !is WebErrorState.None) {
       WebErrorOverlay(
         errorState = webErrorState,
@@ -359,11 +401,12 @@ fun SecureWebViewContainer(
   }
 }
 
-private fun mapFriendlyErrorMessage(
+private fun mapFriendlyNetworkErrorMessage(
   errorCode: Int,
   rawDescription: String,
   disconnectedMsg: String,
   timeoutMsg: String,
+  serverErrorMsg: String,
   genericMsg: String,
 ): String {
   val descUpper = rawDescription.uppercase()
@@ -375,6 +418,9 @@ private fun mapFriendlyErrorMessage(
       descUpper.contains("ADDRESS_UNREACHABLE") ||
       descUpper.contains("NETWORK_CHANGED") -> disconnectedMsg
     errorCode == WebViewClient.ERROR_TIMEOUT || descUpper.contains("TIMED_OUT") -> timeoutMsg
+    descUpper.contains("HTTP_RESPONSE_CODE_FAILURE") ||
+      errorCode == WebViewClient.ERROR_BAD_URL ||
+      errorCode == WebViewClient.ERROR_FAILED_SSL_HANDSHAKE -> serverErrorMsg
     else -> genericMsg
   }
 }

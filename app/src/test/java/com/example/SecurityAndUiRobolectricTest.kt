@@ -58,12 +58,22 @@ class SecurityAndUiRobolectricTest {
     Dispatchers.resetMain()
   }
 
-  private class FakePreferencesRepository(initial: Boolean = true) : SecurityPreferencesRepository {
-    private val state = MutableStateFlow(initial)
-    override val antiScreenshotEnabled: Flow<Boolean> = state
+  private class FakePreferencesRepository(
+    initialAntiScreenshot: Boolean = true,
+    initialAppLockPref: Boolean? = null,
+  ) : SecurityPreferencesRepository {
+    private val antiScreenshotState = MutableStateFlow(initialAntiScreenshot)
+    private val appLockState = MutableStateFlow(initialAppLockPref)
+
+    override val antiScreenshotEnabled: Flow<Boolean> = antiScreenshotState
+    override val appLockPreference: Flow<Boolean?> = appLockState
 
     override suspend fun setAntiScreenshotEnabled(enabled: Boolean) {
-      state.value = enabled
+      antiScreenshotState.value = enabled
+    }
+
+    override suspend fun setAppLockEnabled(enabled: Boolean) {
+      appLockState.value = enabled
     }
   }
 
@@ -87,7 +97,7 @@ class SecurityAndUiRobolectricTest {
   @Test
   fun `viewmodel transitions splash lock and anti screenshot preference`() =
     runTest(testDispatcher) {
-      val prefs = FakePreferencesRepository(initial = true)
+      val prefs = FakePreferencesRepository(initialAntiScreenshot = true)
       val inspector =
         FakeSecurityInspector(
           DeviceIntegrityReport(isUsbDebuggingEnabled = true)
@@ -110,14 +120,18 @@ class SecurityAndUiRobolectricTest {
     }
 
   @Test
-  fun `settings sheet toggles anti screenshot switch`() {
-    var toggledValue: Boolean? = null
+  fun `settings sheet toggles anti screenshot and app lock switches`() {
+    var toggledAntiScreenshot: Boolean? = null
+    var toggledAppLock: Boolean? = null
     composeTestRule.setContent {
       MailSeptianSupportTheme {
         SettingsSheetContent(
           antiScreenshotEnabled = true,
+          appLockEnabled = true,
+          appLockFollowingSystem = true,
           deviceIntegrityReport = DeviceIntegrityReport(isDeveloperOptionsEnabled = true),
-          onToggleAntiScreenshot = { toggledValue = it },
+          onToggleAntiScreenshot = { toggledAntiScreenshot = it },
+          onToggleAppLock = { toggledAppLock = it },
           onDismiss = {},
         )
       }
@@ -129,7 +143,12 @@ class SecurityAndUiRobolectricTest {
     composeTestRule.onNodeWithTag("anti_screenshot_switch").performClick()
     composeTestRule.waitForIdle()
 
-    assertFalse(toggledValue ?: true)
+    composeTestRule.onNodeWithTag("app_lock_switch").performScrollTo().assertIsOn()
+    composeTestRule.onNodeWithTag("app_lock_switch").performClick()
+    composeTestRule.waitForIdle()
+
+    assertFalse(toggledAntiScreenshot ?: true)
+    assertFalse(toggledAppLock ?: true)
   }
 
   @Test
@@ -192,18 +211,22 @@ class SecurityAndUiRobolectricTest {
   }
 
   @Test
-  fun `settings sheet shows off state when anti screenshot disabled`() {
+  fun `settings sheet shows off states when switches disabled`() {
     composeTestRule.setContent {
       MailSeptianSupportTheme {
         SettingsSheetContent(
           antiScreenshotEnabled = false,
+          appLockEnabled = false,
+          appLockFollowingSystem = false,
           deviceIntegrityReport = DeviceIntegrityReport(),
           onToggleAntiScreenshot = {},
+          onToggleAppLock = {},
           onDismiss = {},
         )
       }
     }
     composeTestRule.waitForIdle()
-    composeTestRule.onNodeWithTag("anti_screenshot_switch").assertIsOff()
+    composeTestRule.onNodeWithTag("anti_screenshot_switch").performScrollTo().assertIsOff()
+    composeTestRule.onNodeWithTag("app_lock_switch").performScrollTo().assertIsOff()
   }
 }

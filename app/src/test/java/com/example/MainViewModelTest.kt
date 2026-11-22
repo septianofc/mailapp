@@ -38,12 +38,22 @@ class MainViewModelTest {
     Dispatchers.resetMain()
   }
 
-  private class FakePreferencesRepository(initial: Boolean = true) : SecurityPreferencesRepository {
-    private val state = MutableStateFlow(initial)
-    override val antiScreenshotEnabled: Flow<Boolean> = state
+  private class FakePreferencesRepository(
+    initialAntiScreenshot: Boolean = true,
+    initialAppLockPref: Boolean? = null,
+  ) : SecurityPreferencesRepository {
+    private val antiScreenshotState = MutableStateFlow(initialAntiScreenshot)
+    private val appLockState = MutableStateFlow(initialAppLockPref)
+
+    override val antiScreenshotEnabled: Flow<Boolean> = antiScreenshotState
+    override val appLockPreference: Flow<Boolean?> = appLockState
 
     override suspend fun setAntiScreenshotEnabled(enabled: Boolean) {
-      state.value = enabled
+      antiScreenshotState.value = enabled
+    }
+
+    override suspend fun setAppLockEnabled(enabled: Boolean) {
+      appLockState.value = enabled
     }
   }
 
@@ -64,7 +74,7 @@ class MainViewModelTest {
             isUsbDebuggingEnabled = false,
           )
         )
-      val vm = MainViewModel(FakePreferencesRepository(true), inspector, testDispatcher)
+      val vm = MainViewModel(FakePreferencesRepository(), inspector, testDispatcher)
 
       assertTrue(vm.uiState.value.showSplash)
       advanceTimeBy(MainViewModel.SPLASH_DURATION_MS + 50L)
@@ -76,11 +86,32 @@ class MainViewModelTest {
     }
 
   @Test
-  fun `app lock transitions and background relock work properly`() =
+  fun `app lock default follows system capability when preference is unset`() =
     runTest(testDispatcher) {
       val vm =
         MainViewModel(
-          FakePreferencesRepository(true),
+          FakePreferencesRepository(initialAppLockPref = null),
+          FakeSecurityInspector(DeviceIntegrityReport()),
+          testDispatcher,
+        )
+
+      vm.updateAppLockCapability(AppLockCapability.NoCredentialEnrolled)
+      assertTrue(vm.uiState.value.isAppLockFollowingSystem)
+      assertFalse(vm.uiState.value.isAppLockEnabled)
+      assertEquals(AppLockState.Unlocked, vm.uiState.value.appLockState)
+
+      vm.updateAppLockCapability(AppLockCapability.Available)
+      assertTrue(vm.uiState.value.isAppLockEnabled)
+      vm.lockOnBackground()
+      assertEquals(AppLockState.Locked, vm.uiState.value.appLockState)
+    }
+
+  @Test
+  fun `app lock transitions and manual toggle off disable background relock`() =
+    runTest(testDispatcher) {
+      val vm =
+        MainViewModel(
+          FakePreferencesRepository(),
           FakeSecurityInspector(DeviceIntegrityReport()),
           testDispatcher,
         )
@@ -93,12 +124,27 @@ class MainViewModelTest {
 
       vm.lockOnBackground()
       assertEquals(AppLockState.Locked, vm.uiState.value.appLockState)
+
+      vm.setAppLockEnabled(false)
+      testDispatcher.scheduler.advanceUntilIdle()
+      assertFalse(vm.uiState.value.isAppLockFollowingSystem)
+      assertFalse(vm.uiState.value.isAppLockEnabled)
+      assertEquals(AppLockState.Unlocked, vm.uiState.value.appLockState)
+
+      vm.lockOnBackground()
+      assertEquals(AppLockState.Unlocked, vm.uiState.value.appLockState)
+
+      vm.setAppLockEnabled(true)
+      testDispatcher.scheduler.advanceUntilIdle()
+      assertTrue(vm.uiState.value.isAppLockEnabled)
+      vm.lockOnBackground()
+      assertEquals(AppLockState.Locked, vm.uiState.value.appLockState)
     }
 
   @Test
   fun `anti screenshot preference persists and toggles cleanly`() =
     runTest(testDispatcher) {
-      val prefs = FakePreferencesRepository(initial = true)
+      val prefs = FakePreferencesRepository(initialAntiScreenshot = true)
       val vm = MainViewModel(prefs, FakeSecurityInspector(DeviceIntegrityReport()), testDispatcher)
       testDispatcher.scheduler.advanceUntilIdle()
       assertTrue(vm.uiState.value.antiScreenshotEnabled)
@@ -113,7 +159,7 @@ class MainViewModelTest {
     runTest(testDispatcher) {
       val vm =
         MainViewModel(
-          FakePreferencesRepository(true),
+          FakePreferencesRepository(),
           FakeSecurityInspector(DeviceIntegrityReport()),
           testDispatcher,
         )

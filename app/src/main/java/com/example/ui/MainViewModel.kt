@@ -38,20 +38,27 @@ sealed interface WebErrorState {
 data class MainUiState(
   val showSplash: Boolean = true,
   val appLockState: AppLockState = AppLockState.Locked,
+  val appLockPreference: Boolean? = null,
+  val systemSupportsAppLock: Boolean = false,
   val isAuthenticating: Boolean = false,
   val authErrorMessage: String? = null,
   val antiScreenshotEnabled: Boolean = true,
   val deviceIntegrityReport: DeviceIntegrityReport = DeviceIntegrityReport(),
-  val isWarningExpanded: Boolean = false,
   val isSettingsOpen: Boolean = false,
-  val webProgress: Int = 0,
   val isWebLoading: Boolean = true,
   val webErrorState: WebErrorState = WebErrorState.None,
   val blockedNavigationCount: Int = 0,
   val lastBlockedNotice: String? = null,
   val reloadTrigger: Int = 0,
   val unlockedWithoutDeviceLock: Boolean = false,
-)
+) {
+  /** Effective App Lock state: manual user preference if set, otherwise follows system capability. */
+  val isAppLockEnabled: Boolean
+    get() = appLockPreference ?: systemSupportsAppLock
+
+  val isAppLockFollowingSystem: Boolean
+    get() = appLockPreference == null
+}
 
 class MainViewModel(
   private val preferencesRepository: SecurityPreferencesRepository,
@@ -62,10 +69,21 @@ class MainViewModel(
   private val _uiState = MutableStateFlow(MainUiState())
   val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
 
+  private var lastCapability: AppLockCapability = AppLockCapability.NoCredentialEnrolled
+
   init {
     viewModelScope.launch {
       preferencesRepository.antiScreenshotEnabled.collect { enabled ->
         _uiState.update { it.copy(antiScreenshotEnabled = enabled) }
+      }
+    }
+
+    viewModelScope.launch {
+      preferencesRepository.appLockPreference.collect { pref ->
+        _uiState.update { state ->
+          val updated = state.copy(appLockPreference = pref)
+          resolveLockState(updated, lastCapability)
+        }
       }
     }
 
@@ -85,19 +103,34 @@ class MainViewModel(
   }
 
   fun updateAppLockCapability(capability: AppLockCapability) {
+    lastCapability = capability
     _uiState.update { state ->
-      if (state.appLockState is AppLockState.Unlocked) {
-        state
-      } else {
-        when (capability) {
-          AppLockCapability.Available -> state.copy(appLockState = AppLockState.Locked)
-          AppLockCapability.NoCredentialEnrolled ->
-            state.copy(appLockState = AppLockState.NoDeviceCredential)
-          is AppLockCapability.Unavailable ->
-            state.copy(appLockState = AppLockState.HardwareUnavailable(capability.reason))
-        }
-      }
+      val updated =
+        state.copy(systemSupportsAppLock = capability is AppLockCapability.Available)
+      resolveLockState(updated, capability)
     }
+  }
+
+  private fun resolveLockState(
+    state: MainUiState,
+    capability: AppLockCapability,
+  ): MainUiState {
+    if (!state.isAppLockEnabled) {
+      return state.copy(
+        appLockState = AppLockState.Unlocked,
+        authErrorMessage = null,
+      )
+    }
+    if (state.appLockState is AppLockState.Unlocked) {
+      return state
+    }
+    val nextLockState =
+      when (capability) {
+        AppLockCapability.Available -> AppLockState.Locked
+        AppLockCapability.NoCredentialEnrolled -> AppLockState.NoDeviceCredential
+        is AppLockCapability.Unavailable -> AppLockState.HardwareUnavailable(capability.reason)
+      }
+    return state.copy(appLockState = nextLockState)
   }
 
   fun onAuthenticationStarted() {
@@ -135,7 +168,7 @@ class MainViewModel(
 
   fun lockOnBackground() {
     _uiState.update { state ->
-      if (state.isAuthenticating) {
+      if (state.isAuthenticating || !state.isAppLockEnabled) {
         state
       } else {
         state.copy(appLockState = AppLockState.Locked, authErrorMessage = null)
@@ -147,18 +180,19 @@ class MainViewModel(
     viewModelScope.launch { preferencesRepository.setAntiScreenshotEnabled(enabled) }
   }
 
+  fun setAppLockEnabled(enabled: Boolean) {
+    viewModelScope.launch { preferencesRepository.setAppLockEnabled(enabled) }
+    _uiState.update { state ->
+      if (!enabled) {
+        state.copy(appLockPreference = false, appLockState = AppLockState.Unlocked)
+      } else {
+        state.copy(appLockPreference = true)
+      }
+    }
+  }
+
   fun setSettingsOpen(open: Boolean) {
     _uiState.update { it.copy(isSettingsOpen = open) }
-  }
-
-  fun toggleWarningExpanded() {
-    _uiState.update { it.copy(isWarningExpanded = !it.isWarningExpanded) }
-  }
-
-  fun onWebProgressChanged(progress: Int) {
-    _uiState.update {
-      it.copy(webProgress = progress.coerceIn(0, 100), isWebLoading = progress in 0..99)
-    }
   }
 
   fun onWebPageStarted() {
@@ -166,7 +200,7 @@ class MainViewModel(
   }
 
   fun onWebPageFinished() {
-    _uiState.update { it.copy(isWebLoading = false, webProgress = 100) }
+    _uiState.update { it.copy(isWebLoading = false) }
   }
 
   fun onWebNetworkError(description: String) {
@@ -202,7 +236,6 @@ class MainViewModel(
       it.copy(
         webErrorState = WebErrorState.None,
         isWebLoading = true,
-        webProgress = 0,
         reloadTrigger = it.reloadTrigger + 1,
       )
     }

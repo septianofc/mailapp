@@ -77,12 +77,14 @@ class MainActivity : FragmentActivity() {
 
       LaunchedEffect(
         uiState.showSplash,
+        uiState.isAppLockEnabled,
         uiState.appLockState,
         uiState.deviceIntegrityReport.hasAnyWarning,
       ) {
         if (
           !uiState.showSplash &&
             !uiState.deviceIntegrityReport.hasAnyWarning &&
+            uiState.isAppLockEnabled &&
             uiState.appLockState is AppLockState.Locked &&
             !autoPromptIssuedForCurrentLock
         ) {
@@ -101,6 +103,7 @@ class MainActivity : FragmentActivity() {
             refreshLockCapability()
             if (
               !viewModel.uiState.value.deviceIntegrityReport.hasAnyWarning &&
+                viewModel.uiState.value.isAppLockEnabled &&
                 viewModel.uiState.value.appLockState is AppLockState.Locked
             ) {
               launchBiometricPrompt()
@@ -110,9 +113,9 @@ class MainActivity : FragmentActivity() {
           onContinueWithoutCredential = { viewModel.onContinueWithoutDeviceCredential() },
           onExitApp = { exitApplication() },
           onToggleAntiScreenshot = { enabled -> viewModel.setAntiScreenshotEnabled(enabled) },
+          onToggleAppLock = { enabled -> viewModel.setAppLockEnabled(enabled) },
           onOpenSettings = { viewModel.setSettingsOpen(true) },
           onCloseSettings = { viewModel.setSettingsOpen(false) },
-          onWebProgressChanged = { progress -> viewModel.onWebProgressChanged(progress) },
           onWebPageStarted = { viewModel.onWebPageStarted() },
           onWebPageFinished = { viewModel.onWebPageFinished() },
           onWebNetworkError = { desc -> viewModel.onWebNetworkError(desc) },
@@ -140,6 +143,7 @@ class MainActivity : FragmentActivity() {
 
   private fun launchBiometricPrompt() {
     if (viewModel.uiState.value.deviceIntegrityReport.hasAnyWarning) return
+    if (!viewModel.uiState.value.isAppLockEnabled) return
     val capability = AppLockManager.checkCapability(this)
     if (capability != AppLockCapability.Available) {
       viewModel.updateAppLockCapability(capability)
