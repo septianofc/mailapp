@@ -68,6 +68,8 @@ class MainViewModelTest {
     NetworkStatusMonitor {
     val state = MutableStateFlow(initialStatus)
 
+    override fun currentStatus(): NetworkStatus = state.value
+
     override fun observeStatus(): Flow<NetworkStatus> = state
   }
 

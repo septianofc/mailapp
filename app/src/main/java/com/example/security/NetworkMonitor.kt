@@ -17,12 +17,21 @@ enum class NetworkStatus {
 }
 
 interface NetworkStatusMonitor {
+  fun currentStatus(): NetworkStatus
+
   fun observeStatus(): Flow<NetworkStatus>
 }
 
 class AndroidNetworkMonitor(context: Context) : NetworkStatusMonitor {
 
   private val appContext = context.applicationContext
+
+  override fun currentStatus(): NetworkStatus {
+    val cm =
+      appContext.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+        ?: return NetworkStatus.Offline
+    return evaluateCurrentStatus(cm)
+  }
 
   override fun observeStatus(): Flow<NetworkStatus> =
     callbackFlow {
@@ -95,6 +104,15 @@ class AndroidNetworkMonitor(context: Context) : NetworkStatusMonitor {
 
   companion object {
     internal const val LOW_BANDWIDTH_KBPS_THRESHOLD = 450
+
+    fun isOnlineNow(context: Context): Boolean {
+      val cm =
+        context.applicationContext.getSystemService(Context.CONNECTIVITY_SERVICE)
+          as? ConnectivityManager ?: return false
+      val active = cm.activeNetwork ?: return false
+      val caps = cm.getNetworkCapabilities(active) ?: return false
+      return classifyCapabilities(caps) != NetworkStatus.Offline
+    }
 
     fun classifyCapabilities(capabilities: NetworkCapabilities): NetworkStatus {
       if (!capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {

@@ -4,10 +4,35 @@ import java.net.URI
 
 /**
  * Enforces strict HTTPS-only navigation and host allowlist policy for WebView.
+ *
+ * Host and entry path tokens are stored in obfuscated byte tables and resolved at runtime
+ * so trivial static DEX string searches do not expose plain endpoint strings.
  */
 object WebViewUrlPolicy {
-  const val ENTRY_URL = "https://septianfr.web.id/mail/support/login.php"
-  const val ALLOWED_HOST = "septianfr.web.id"
+
+  private val schemeBytes = intArrayOf(42, 61, 36, 39, 49, 115, 127, 120)
+  private val hostBytes =
+    intArrayOf(49, 44, 32, 35, 43, 40, 62, 49, 48, 103, 39, 50, 32, 103, 57, 51)
+  private val entryPathBytes =
+    intArrayOf(
+      109, 36, 49, 62, 46, 102, 35, 34, 50, 57, 63, 37,
+      54, 102, 60, 56, 37, 32, 62, 121, 50, 33, 32,
+    )
+
+  private fun decodeToken(encoded: IntArray): String {
+    val out = CharArray(encoded.size)
+    for (i in encoded.indices) {
+      val key = 0x42 + (i % 4) * 7
+      out[i] = (encoded[i] xor key).toChar()
+    }
+    return String(out)
+  }
+
+  private val resolvedScheme: String by lazy { decodeToken(schemeBytes) }
+  val ALLOWED_HOST: String by lazy { decodeToken(hostBytes) }
+  private val resolvedEntryPath: String by lazy { decodeToken(entryPathBytes) }
+  val ENTRY_URL: String by lazy { "$resolvedScheme$ALLOWED_HOST$resolvedEntryPath" }
+  val SUPPORT_PATH_PREFIX: String by lazy { resolvedEntryPath.substring(0, 14) }
 
   fun isAllowedNavigationUrl(rawUrl: String?): Boolean {
     val candidate = rawUrl?.trim() ?: return false

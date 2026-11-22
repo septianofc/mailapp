@@ -102,6 +102,14 @@ class MainViewModel(
     }
 
     if (networkStatusMonitor != null) {
+      val initialStatus = networkStatusMonitor.currentStatus()
+      _uiState.update {
+        it.copy(
+          networkStatus = initialStatus,
+          isNetworkBannerVisible = initialStatus == NetworkStatus.Offline,
+        )
+      }
+      hasReceivedNetworkObservation = true
       viewModelScope.launch {
         networkStatusMonitor.observeStatus().collect { status ->
           markedUnstableBySlowWebLoad = false

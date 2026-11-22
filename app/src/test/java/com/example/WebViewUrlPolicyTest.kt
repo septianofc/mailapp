@@ -9,6 +9,13 @@ class WebViewUrlPolicyTest {
 
   @Test
   fun `allows exact https septianfr web id navigation urls`() {
+    org.junit.Assert.assertEquals("septianfr.web.id", WebViewUrlPolicy.ALLOWED_HOST)
+    org.junit.Assert.assertEquals(
+      "https://septianfr.web.id/mail/support/login.php",
+      WebViewUrlPolicy.ENTRY_URL,
+    )
+    org.junit.Assert.assertEquals("/mail/support/", WebViewUrlPolicy.SUPPORT_PATH_PREFIX)
+
     assertTrue(WebViewUrlPolicy.isAllowedNavigationUrl(WebViewUrlPolicy.ENTRY_URL))
     assertTrue(WebViewUrlPolicy.isAllowedNavigationUrl("https://septianfr.web.id/mail/support/"))
     assertTrue(WebViewUrlPolicy.isAllowedNavigationUrl("https://SEPTIANFR.WEB.ID/dashboard"))

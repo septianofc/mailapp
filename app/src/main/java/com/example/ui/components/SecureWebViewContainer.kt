@@ -75,6 +75,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.example.BuildConfig
 import com.example.R
+import com.example.security.AndroidNetworkMonitor
 import com.example.security.SafeLogger
 import com.example.security.WebCacheManager
 import com.example.security.WebPageErrorDetector
@@ -109,7 +110,7 @@ private const val PAGE_INSPECTION_JS = """
         title: title,
         snippet: bodyText.substring(0, 750),
         length: bodyText.length,
-        html: html.length <= 500000 ? html : ''
+        html: html.length <= 4000000 ? html : ''
       };
     } catch (e) {
       return { title: '', snippet: '', length: 0, html: '' };
@@ -137,7 +138,9 @@ fun SecureWebViewContainer(
   val context = LocalContext.current
   val ioScope = rememberCoroutineScope()
   val webCacheManager = remember(context) { WebCacheManager(context) }
-  val onlineFlag = remember { AtomicBoolean(isNetworkOnline) }
+  val onlineFlag = remember {
+    AtomicBoolean(isNetworkOnline && AndroidNetworkMonitor.isOnlineNow(context))
+  }
 
   var webViewRef by remember { mutableStateOf<WebView?>(null) }
   var canGoBack by remember { mutableStateOf(false) }
@@ -182,12 +185,15 @@ fun SecureWebViewContainer(
         lastFailedAtMs = 0L
         isPageVisible = false
         currentLoadHadError = false
+        webCacheManager.requestForceRefresh()
         webView.visibility = View.INVISIBLE
         val target =
           if (WebViewUrlPolicy.isAllowedNavigationUrl(lastAttemptedUrl)) {
             lastAttemptedUrl
-          } else {
+          } else if (onlineFlag.get()) {
             WebViewUrlPolicy.ENTRY_URL
+          } else {
+            webCacheManager.getBestOfflineStartUrl()
           }
         webView.loadUrl(target)
       }
@@ -201,11 +207,17 @@ fun SecureWebViewContainer(
         lastFailedAtMs = 0L
         isPageVisible = false
         currentLoadHadError = false
-        lastAttemptedUrl = WebViewUrlPolicy.ENTRY_URL
-        lastValidUrl = WebViewUrlPolicy.ENTRY_URL
+        val homeUrl =
+          if (onlineFlag.get()) {
+            WebViewUrlPolicy.ENTRY_URL
+          } else {
+            webCacheManager.getBestOfflineStartUrl()
+          }
+        lastAttemptedUrl = homeUrl
+        lastValidUrl = homeUrl
         webView.visibility = View.INVISIBLE
         webView.clearHistory()
-        webView.loadUrl(WebViewUrlPolicy.ENTRY_URL)
+        webView.loadUrl(homeUrl)
       }
     }
   }
@@ -232,6 +244,17 @@ fun SecureWebViewContainer(
     AndroidView(
       modifier = Modifier.fillMaxSize().testTag("mail_septian_webview"),
       factory = { ctx ->
+        val initialOnline = AndroidNetworkMonitor.isOnlineNow(ctx)
+        onlineFlag.set(initialOnline)
+        val initialStartUrl =
+          if (initialOnline) {
+            WebViewUrlPolicy.ENTRY_URL
+          } else {
+            webCacheManager.getBestOfflineStartUrl()
+          }
+        lastAttemptedUrl = initialStartUrl
+        lastValidUrl = initialStartUrl
+
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
         WebView(ctx).apply {
           layoutParams =
@@ -244,7 +267,7 @@ fun SecureWebViewContainer(
           isHorizontalScrollBarEnabled = false
           overScrollMode = View.OVER_SCROLL_NEVER
 
-          configureHardenedSettings(this, onlineFlag.get())
+          configureHardenedSettings(this, initialOnline)
           configureSecureCookies(this)
 
           fun triggerNativeFailure(
@@ -261,8 +284,6 @@ fun SecureWebViewContainer(
             }
             view?.visibility = View.INVISIBLE
             view?.stopLoading()
-            // Replace Chromium's internal error buffer immediately so "Halaman web tidak tersedia"
-            // or raw URLs can never render beneath/during state transitions.
             view?.post {
               if (view.url != ABOUT_BLANK) {
                 view.loadUrl(ABOUT_BLANK)
@@ -283,8 +304,8 @@ fun SecureWebViewContainer(
               ): Boolean {
                 val url = request?.url?.toString()
                 return if (WebViewUrlPolicy.isAllowedNavigationUrl(url)) {
-                  if (url?.contains("logout", ignoreCase = true) == true) {
-                    webCacheManager.clearHtmlSnapshots()
+                  if (url != null && WebCacheManager.isLogoutUrl(url)) {
+                    webCacheManager.clearOfflinePages()
                   }
                   false
                 } else {
@@ -316,8 +337,8 @@ fun SecureWebViewContainer(
                   )
                 }
 
-                // Serve ETag-cached static assets and offline visited HTML snapshots
-                return webCacheManager.interceptGetRequest(
+                // Uses persistent full-source vault for fast conditional revalidation & offline mode
+                return webCacheManager.interceptRequest(
                   request = request,
                   isOnline = onlineFlag.get(),
                 )
@@ -408,9 +429,14 @@ fun SecureWebViewContainer(
                     )
                   } else {
                     lastValidUrl = url
-                    if (html.isNotBlank() && !url.contains("logout", ignoreCase = true)) {
+                    if (html.isNotBlank() && !WebCacheManager.isLogoutUrl(url)) {
                       ioScope.launch(Dispatchers.IO) {
-                        webCacheManager.saveHtmlSnapshot(url = url, html = html)
+                        if (!webCacheManager.hasFreshPageCache(url)) {
+                          webCacheManager.saveHtmlSnapshot(url = url, html = html)
+                        }
+                        if (onlineFlag.get()) {
+                          webCacheManager.prefetchLinkedPagesAsync(baseUrl = url, html = html)
+                        }
                       }
                     }
                     inspectedView.visibility = View.VISIBLE
@@ -494,7 +520,7 @@ fun SecureWebViewContainer(
               }
             }
 
-          loadUrl(WebViewUrlPolicy.ENTRY_URL)
+          loadUrl(initialStartUrl)
           webViewRef = this
         }
       },

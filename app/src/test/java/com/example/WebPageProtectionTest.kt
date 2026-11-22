@@ -89,4 +89,34 @@ class WebPageProtectionTest {
     assertFalse(WebCacheManager.isCacheableStaticAsset("https://septianfr.web.id/mail/support/login.php"))
     assertFalse(WebCacheManager.isCacheableStaticAsset("https://septianfr.web.id/mail/support/api/send"))
   }
+
+  @Test
+  fun `extracts safe sibling support links and excludes logout or mutating links`() {
+    val html =
+      """
+      <html><body>
+        <a href="dashboard.php">Dashboard</a>
+        <a href="/mail/support/inbox.php">Inbox</a>
+        <a href="settings.php#section">Settings</a>
+        <a href="logout.php">Keluar</a>
+        <a href="inbox.php?action=delete&id=1">Hapus</a>
+        <a href="https://other.example.com/phish">External</a>
+      </body></html>
+      """
+    val links =
+      WebCacheManager.extractSafeLinkedUrls(
+        baseUrl = "https://septianfr.web.id/mail/support/index.php",
+        html = html,
+      )
+    assertEquals(
+      listOf(
+        "https://septianfr.web.id/mail/support/dashboard.php",
+        "https://septianfr.web.id/mail/support/inbox.php",
+        "https://septianfr.web.id/mail/support/settings.php",
+      ),
+      links,
+    )
+    assertTrue(WebCacheManager.isLogoutUrl("https://septianfr.web.id/mail/support/logout.php"))
+    assertFalse(WebCacheManager.isLogoutUrl("https://septianfr.web.id/mail/support/dashboard.php"))
+  }
 }
