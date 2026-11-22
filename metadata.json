@@ -1,0 +1,6 @@
+{
+  "name": "Mail Septian Support",
+  "description": "Aplikasi WebView aman untuk Mail Septian Support dengan App Lock biometrik/kredensial perangkat, deteksi integritas perangkat, dan proteksi anti-screenshot.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
