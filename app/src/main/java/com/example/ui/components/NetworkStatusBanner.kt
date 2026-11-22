@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -84,7 +85,11 @@ fun NetworkStatusBanner(
     color = containerColor,
     border = BorderStroke(1.dp, borderColor),
     shadowElevation = 4.dp,
-    modifier = modifier.widthIn(max = 360.dp).testTag("network_status_indicator"),
+    modifier =
+      modifier
+        .widthIn(max = 360.dp)
+        .semantics(mergeDescendants = true) {}
+        .testTag("network_status_indicator"),
   ) {
     Row(
       verticalAlignment = Alignment.CenterVertically,

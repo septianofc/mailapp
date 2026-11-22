@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
@@ -245,6 +246,7 @@ class SecurityAndUiRobolectricTest {
       .onNodeWithTag("network_status_indicator")
       .assertIsDisplayed()
       .assertTextContains("Offline", substring = true)
+    composeTestRule.onNodeWithText("Offline", substring = true, useUnmergedTree = true).assertIsDisplayed()
   }
 
   @Test
@@ -259,6 +261,9 @@ class SecurityAndUiRobolectricTest {
       .onNodeWithTag("network_status_indicator")
       .assertIsDisplayed()
       .assertTextContains("kurang stabil", substring = true)
+    composeTestRule
+      .onNodeWithText("kurang stabil", substring = true, useUnmergedTree = true)
+      .assertIsDisplayed()
   }
 
   @Test
@@ -273,5 +278,8 @@ class SecurityAndUiRobolectricTest {
       .onNodeWithTag("network_status_indicator")
       .assertIsDisplayed()
       .assertTextContains("Kembali online", substring = true)
+    composeTestRule
+      .onNodeWithText("Kembali online", substring = true, useUnmergedTree = true)
+      .assertIsDisplayed()
   }
 }
