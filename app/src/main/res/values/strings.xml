@@ -1,7 +1,6 @@
 
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-
     <string name="app_name">Mail Septian Support</string>
     <string name="brand_subtitle">Support Septian</string>
     <string name="version_label">Versi: MSFR_RATNA_2245</string>
@@ -17,9 +16,8 @@
     <string name="status_on">AKTIF</string>
     <string name="status_off">NONAKTIF</string>
 
-    <!-- Device Integrity & Blocked Page -->
+    <!-- Device Integrity -->
     <string name="security_status_section_title">Deteksi Integritas Perangkat (Otomatis)</string>
-
     <string name="security_disclaimer">Catatan: Deteksi root, Magisk, superuser, Developer Options, dan USB Debugging bersifat heuristik dan tidak menjamin akurasi 100%%.</string>
 
     <string name="blocked_title">Akses Aplikasi Diblokir</string>
@@ -72,5 +70,4 @@
     <string name="about_host_value">HTTPS Terverifikasi</string>
     <string name="about_apk_protection">Rilis APK menggunakan R8 minification &amp; obfuscation serta penonaktifan log debug. Proteksi ini meningkatkan ketahanan analisis statis, namun tidak membuat APK mustahil didecompile.</string>
     <string name="close">Tutup</string>
-
 </resources>
