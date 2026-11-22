@@ -8,6 +8,7 @@ import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.SecurityPreferencesRepository
 import com.example.security.AndroidDeviceSecurityInspector
@@ -124,7 +125,7 @@ class SecurityAndUiRobolectricTest {
     composeTestRule.waitForIdle()
 
     composeTestRule.onNodeWithTag("settings_sheet_content").assertIsDisplayed()
-    composeTestRule.onNodeWithTag("anti_screenshot_switch").assertIsOn()
+    composeTestRule.onNodeWithTag("anti_screenshot_switch").performScrollTo().assertIsOn()
     composeTestRule.onNodeWithTag("anti_screenshot_switch").performClick()
     composeTestRule.waitForIdle()
 
@@ -154,8 +155,10 @@ class SecurityAndUiRobolectricTest {
     composeTestRule.waitForIdle()
 
     composeTestRule.onNodeWithTag("security_blocked_screen").assertIsDisplayed()
-    composeTestRule.onNodeWithTag("blocked_recheck_button").performClick()
-    composeTestRule.onNodeWithTag("blocked_exit_button").performClick()
+    composeTestRule.onNodeWithTag("blocked_recheck_button").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("blocked_exit_button").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
     assertTrue(recheckClicked)
     assertTrue(exitClicked)
   }
@@ -180,8 +183,10 @@ class SecurityAndUiRobolectricTest {
     composeTestRule.waitForIdle()
 
     composeTestRule.onNodeWithTag("app_lock_screen").assertIsDisplayed()
-    composeTestRule.onNodeWithTag("unlock_biometric_button").assertIsDisplayed().performClick()
-    composeTestRule.onNodeWithTag("applock_exit_button").assertIsDisplayed().performClick()
+    composeTestRule.onNodeWithTag("unlock_biometric_button").performScrollTo().assertIsDisplayed().performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("applock_exit_button").performScrollTo().assertIsDisplayed().performClick()
+    composeTestRule.waitForIdle()
     assertTrue(unlockClicked)
     assertTrue(exitClicked)
   }
