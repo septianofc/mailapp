@@ -98,9 +98,10 @@ fun SecureWebViewContainer(
   val context = LocalContext.current
   var webViewRef by remember { mutableStateOf<WebView?>(null) }
   var canGoBack by remember { mutableStateOf(false) }
+  var lastValidUrl by remember { mutableStateOf(WebViewUrlPolicy.ENTRY_URL) }
 
-  // Keeps WebView visually masked while recovering from an error so Chromium's
-  // built-in error page (which exposes the URL) is never shown during reload.
+  // Keeps WebView invisible on error and during reload so Chromium's built-in
+  // error page (which exposes the URL) is never visible to the user.
   var isPageVisible by remember { mutableStateOf(false) }
   var currentLoadHadError by remember { mutableStateOf(false) }
 
@@ -123,14 +124,7 @@ fun SecureWebViewContainer(
         isPageVisible = false
         currentLoadHadError = false
         webView.visibility = View.INVISIBLE
-        val lastUrl = webView.url
-        val target =
-          if (lastUrl != null && WebViewUrlPolicy.isAllowedNavigationUrl(lastUrl)) {
-            lastUrl
-          } else {
-            WebViewUrlPolicy.ENTRY_URL
-          }
-        webView.loadUrl(target)
+        webView.loadUrl(lastValidUrl)
       }
     }
   }
@@ -186,8 +180,10 @@ fun SecureWebViewContainer(
                 return if (WebViewUrlPolicy.isAllowedNavigationUrl(url)) {
                   false
                 } else {
-                  SafeLogger.w("Blocked top-level navigation outside allowlist/HTTPS")
-                  onNavigationBlocked(blockedMessage)
+                  SafeLogger.w("Blocked navigation outside allowlist/HTTPS")
+                  if (request?.isForMainFrame == true) {
+                    onNavigationBlocked(blockedMessage)
+                  }
                   true
                 }
               }
@@ -213,13 +209,12 @@ fun SecureWebViewContainer(
               }
 
               override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                if (url == "about:blank") {
-                  return
-                }
                 if (!WebViewUrlPolicy.isAllowedNavigationUrl(url)) {
                   view?.stopLoading()
-                  onNavigationBlocked(blockedMessage)
                   return
+                }
+                if (url != null) {
+                  lastValidUrl = url
                 }
                 currentLoadHadError = false
                 canGoBack = view?.canGoBack() == true
@@ -227,14 +222,9 @@ fun SecureWebViewContainer(
               }
 
               override fun onPageFinished(view: WebView?, url: String?) {
-                if (url == "about:blank") {
-                  view?.visibility = View.INVISIBLE
-                  isPageVisible = false
-                  return
-                }
                 canGoBack = view?.canGoBack() == true
                 CookieManager.getInstance().flush()
-                if (!currentLoadHadError) {
+                if (!currentLoadHadError && WebViewUrlPolicy.isAllowedNavigationUrl(url)) {
                   view?.visibility = View.VISIBLE
                   isPageVisible = true
                   onPageFinished()
@@ -250,8 +240,6 @@ fun SecureWebViewContainer(
                   currentLoadHadError = true
                   isPageVisible = false
                   view?.visibility = View.INVISIBLE
-                  view?.stopLoading()
-                  view?.loadUrl("about:blank")
 
                   val errorCode = error?.errorCode ?: ERROR_UNKNOWN
                   val rawDesc = error?.description?.toString().orEmpty()
@@ -279,8 +267,6 @@ fun SecureWebViewContainer(
                 currentLoadHadError = true
                 isPageVisible = false
                 view?.visibility = View.INVISIBLE
-                view?.stopLoading()
-                view?.loadUrl("about:blank")
                 SafeLogger.w("Strict SSL validation rejected certificate error=${error?.primaryError}")
                 onSslError()
               }

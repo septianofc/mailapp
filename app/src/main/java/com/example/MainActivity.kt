@@ -56,7 +56,7 @@ class MainActivity : FragmentActivity() {
             refreshLockCapability()
           }
           Lifecycle.Event.ON_STOP -> {
-            if (!isChangingConfigurations) {
+            if (!isChangingConfigurations && !viewModel.uiState.value.isAuthenticating) {
               autoPromptIssuedForCurrentLock = false
               viewModel.lockOnBackground()
             }

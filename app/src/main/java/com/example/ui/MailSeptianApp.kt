@@ -83,7 +83,7 @@ fun MailSeptianApp(
           onExitApp = onExitApp,
         )
       }
-      // 3. Unlocked Full-Screen WebView Workspace + Top-Right Settings button
+      // 3. Unlocked Full-Screen WebView Workspace + Bottom-Right Settings button
       else -> {
         Box(
           modifier =
@@ -108,7 +108,7 @@ fun MailSeptianApp(
             modifier = Modifier.fillMaxSize(),
           )
 
-          // Top-Right floating Settings button (avoids website's built-in left menu)
+          // Bottom-Right floating Settings button (avoids top website controls)
           Surface(
             onClick = onOpenSettings,
             shape = CircleShape,
@@ -116,9 +116,9 @@ fun MailSeptianApp(
             shadowElevation = 6.dp,
             border = BorderStroke(1.dp, BrandBlueBorder),
             modifier =
-              Modifier.align(Alignment.TopEnd)
-                .padding(top = 10.dp, end = 12.dp)
-                .size(48.dp)
+              Modifier.align(Alignment.BottomEnd)
+                .padding(end = 16.dp, bottom = 16.dp)
+                .size(50.dp)
                 .testTag("settings_button"),
           ) {
             Box(contentAlignment = Alignment.Center) {

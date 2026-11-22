@@ -80,273 +80,290 @@ fun SettingsSheet(
     dragHandle = null,
     modifier = Modifier.testTag("settings_sheet"),
   ) {
-    Column(
+    SettingsSheetContent(
+      antiScreenshotEnabled = antiScreenshotEnabled,
+      deviceIntegrityReport = deviceIntegrityReport,
+      onToggleAntiScreenshot = onToggleAntiScreenshot,
+      onDismiss = onDismiss,
+    )
+  }
+}
+
+@Composable
+fun SettingsSheetContent(
+  antiScreenshotEnabled: Boolean,
+  deviceIntegrityReport: DeviceIntegrityReport,
+  onToggleAntiScreenshot: (Boolean) -> Unit,
+  onDismiss: () -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  Column(
+    modifier =
+      modifier
+        .fillMaxWidth()
+        .background(PureWhite)
+        .verticalScroll(rememberScrollState())
+        .navigationBarsPadding()
+        .testTag("settings_sheet_content")
+  ) {
+    // Polished #42A5F5 Blue Header Banner
+    Box(
       modifier =
         Modifier.fillMaxWidth()
-          .verticalScroll(rememberScrollState())
-          .navigationBarsPadding()
+          .background(
+            Brush.horizontalGradient(colors = listOf(BrandBluePrimary, BrandBlueDark))
+          )
+          .padding(horizontal = 20.dp, vertical = 18.dp)
     ) {
-      // Polished #42A5F5 Blue Header Banner
-      Box(
-        modifier =
-          Modifier.fillMaxWidth()
-            .background(
-              Brush.horizontalGradient(
-                colors = listOf(BrandBluePrimary, BrandBlueDark)
-              )
-            )
-            .padding(horizontal = 20.dp, vertical = 18.dp)
+      Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth(),
       ) {
-        Row(
-          verticalAlignment = Alignment.CenterVertically,
-          modifier = Modifier.fillMaxWidth(),
+        Surface(
+          shape = CircleShape,
+          color = PureWhite,
+          shadowElevation = 4.dp,
+          modifier = Modifier.size(48.dp).border(2.dp, PureWhite, CircleShape),
+        ) {
+          Image(
+            painter = painterResource(id = R.drawable.brand_logo),
+            contentDescription = stringResource(id = R.string.cd_brand_logo),
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.padding(2.dp).clip(CircleShape),
+          )
+        }
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
+          Text(
+            text = stringResource(id = R.string.settings_title),
+            style = MaterialTheme.typography.titleMedium,
+            color = PureWhite,
+            fontWeight = FontWeight.Bold,
+          )
+          Spacer(modifier = Modifier.height(2.dp))
+          Text(
+            text = stringResource(id = R.string.settings_subtitle),
+            style = MaterialTheme.typography.bodySmall,
+            color = PureWhite.copy(alpha = 0.9f),
+          )
+        }
+        IconButton(
+          onClick = onDismiss,
+          modifier = Modifier.size(48.dp).testTag("close_settings_button"),
         ) {
           Surface(
             shape = CircleShape,
-            color = PureWhite,
-            shadowElevation = 4.dp,
-            modifier = Modifier.size(48.dp).border(2.dp, PureWhite, CircleShape),
+            color = PureWhite.copy(alpha = 0.18f),
+            modifier = Modifier.size(34.dp),
           ) {
-            Image(
-              painter = painterResource(id = R.drawable.brand_logo),
-              contentDescription = stringResource(id = R.string.cd_brand_logo),
-              contentScale = ContentScale.Crop,
-              modifier = Modifier.padding(2.dp).clip(CircleShape),
-            )
-          }
-          Spacer(modifier = Modifier.width(14.dp))
-          Column(modifier = Modifier.weight(1f)) {
-            Text(
-              text = stringResource(id = R.string.settings_title),
-              style = MaterialTheme.typography.titleMedium,
-              color = PureWhite,
-              fontWeight = FontWeight.Bold,
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-              text = stringResource(id = R.string.settings_subtitle),
-              style = MaterialTheme.typography.bodySmall,
-              color = PureWhite.copy(alpha = 0.9f),
-            )
-          }
-          IconButton(
-            onClick = onDismiss,
-            modifier = Modifier.size(48.dp).testTag("close_settings_button"),
-          ) {
-            Surface(
-              shape = CircleShape,
-              color = PureWhite.copy(alpha = 0.18f),
-              modifier = Modifier.size(34.dp),
-            ) {
-              Box(contentAlignment = Alignment.Center) {
-                Icon(
-                  imageVector = Icons.Rounded.Close,
-                  contentDescription = stringResource(id = R.string.close),
-                  tint = PureWhite,
-                  modifier = Modifier.size(18.dp),
-                )
-              }
+            Box(contentAlignment = Alignment.Center) {
+              Icon(
+                imageVector = Icons.Rounded.Close,
+                contentDescription = stringResource(id = R.string.close),
+                tint = PureWhite,
+                modifier = Modifier.size(18.dp),
+              )
             }
           }
         }
       }
+    }
 
-      Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
-        // ONLY changeable user option: Anti Screenshot (FLAG_SECURE)
-        Surface(
-          shape = RoundedCornerShape(18.dp),
-          color = BrandBlueSoftContainer.copy(alpha = 0.55f),
-          border = BorderStroke(1.dp, BrandBlueBorder.copy(alpha = 0.7f)),
-          modifier = Modifier.fillMaxWidth(),
+    Column(modifier = Modifier.fillMaxWidth().padding(20.dp)) {
+      // ONLY changeable user option: Anti Screenshot (FLAG_SECURE)
+      Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = BrandBlueSoftContainer.copy(alpha = 0.55f),
+        border = BorderStroke(1.dp, BrandBlueBorder.copy(alpha = 0.7f)),
+        modifier = Modifier.fillMaxWidth(),
+      ) {
+        Row(
+          verticalAlignment = Alignment.CenterVertically,
+          modifier = Modifier.fillMaxWidth().padding(16.dp),
         ) {
-          Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+          Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = BrandBluePrimary,
+            shadowElevation = 2.dp,
+            modifier = Modifier.size(44.dp),
           ) {
-            Surface(
-              shape = RoundedCornerShape(14.dp),
-              color = BrandBluePrimary,
-              shadowElevation = 2.dp,
-              modifier = Modifier.size(44.dp),
-            ) {
-              Box(contentAlignment = Alignment.Center) {
-                Icon(
-                  imageVector = Icons.Rounded.ScreenshotMonitor,
-                  contentDescription = null,
-                  tint = PureWhite,
-                  modifier = Modifier.size(22.dp),
-                )
-              }
-            }
-            Spacer(modifier = Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-              Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                  text = stringResource(id = R.string.anti_screenshot_title),
-                  style = MaterialTheme.typography.titleMedium,
-                  color = BrandBlueDark,
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Surface(
-                  shape = RoundedCornerShape(50),
-                  color = if (antiScreenshotEnabled) BrandBluePrimary else SlateBorder,
-                ) {
-                  Text(
-                    text =
-                      stringResource(
-                        id = if (antiScreenshotEnabled) R.string.status_on else R.string.status_off
-                      ),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = PureWhite,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                  )
-                }
-              }
-              Spacer(modifier = Modifier.height(4.dp))
-              Text(
-                text = stringResource(id = R.string.anti_screenshot_desc),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Box(contentAlignment = Alignment.Center) {
+              Icon(
+                imageVector = Icons.Rounded.ScreenshotMonitor,
+                contentDescription = null,
+                tint = PureWhite,
+                modifier = Modifier.size(22.dp),
               )
             }
-            Spacer(modifier = Modifier.width(12.dp))
-            Switch(
-              checked = antiScreenshotEnabled,
-              onCheckedChange = onToggleAntiScreenshot,
-              colors =
-                SwitchDefaults.colors(
-                  checkedThumbColor = PureWhite,
-                  checkedTrackColor = BrandBluePrimary,
-                  uncheckedThumbColor = PureWhite,
-                  uncheckedTrackColor = SlateBorder,
-                  uncheckedBorderColor = SlateBorder,
-                ),
-              modifier = Modifier.testTag("anti_screenshot_switch"),
-            )
           }
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // Read-only automatic device security status
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          Icon(
-            imageVector = Icons.Rounded.Shield,
-            contentDescription = null,
-            tint = BrandBluePrimary,
-            modifier = Modifier.size(18.dp),
-          )
-          Spacer(modifier = Modifier.width(6.dp))
-          Text(
-            text = stringResource(id = R.string.security_status_section_title),
-            style = MaterialTheme.typography.labelMedium,
-            color = BrandBlueDark,
-          )
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        Surface(
-          shape = RoundedCornerShape(18.dp),
-          color = SoftWhiteBackground,
-          border = BorderStroke(1.dp, SlateBorder),
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Column(modifier = Modifier.padding(16.dp)) {
-            SecurityCheckRow(
-              label = stringResource(id = R.string.flag_root_magisk),
-              detected = deviceIntegrityReport.isRootOrMagiskSuspected,
-            )
-            HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = SlateBorder)
-            SecurityCheckRow(
-              label = stringResource(id = R.string.flag_dev_options),
-              detected = deviceIntegrityReport.isDeveloperOptionsEnabled,
-            )
-            HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = SlateBorder)
-            SecurityCheckRow(
-              label = stringResource(id = R.string.flag_usb_debugging),
-              detected = deviceIntegrityReport.isUsbDebuggingEnabled,
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-              text = stringResource(id = R.string.security_disclaimer),
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-          }
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // Read-only app & APK protection info
-        Row(verticalAlignment = Alignment.CenterVertically) {
-          Icon(
-            imageVector = Icons.Rounded.Info,
-            contentDescription = null,
-            tint = BrandBluePrimary,
-            modifier = Modifier.size(18.dp),
-          )
-          Spacer(modifier = Modifier.width(6.dp))
-          Text(
-            text = stringResource(id = R.string.about_section_title),
-            style = MaterialTheme.typography.labelMedium,
-            color = BrandBlueDark,
-          )
-        }
-
-        Spacer(modifier = Modifier.height(10.dp))
-
-        Surface(
-          shape = RoundedCornerShape(18.dp),
-          color = SoftWhiteBackground,
-          border = BorderStroke(1.dp, SlateBorder),
-          modifier = Modifier.fillMaxWidth(),
-        ) {
-          Column(modifier = Modifier.padding(16.dp)) {
+          Spacer(modifier = Modifier.width(14.dp))
+          Column(modifier = Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-              Column(modifier = Modifier.weight(1f)) {
-                Text(
-                  text = stringResource(id = R.string.app_name),
-                  style = MaterialTheme.typography.titleMedium,
-                  color = BrandBlueDark,
-                )
-                Text(
-                  text = stringResource(id = R.string.version_label),
-                  style = MaterialTheme.typography.bodySmall,
-                  color = BrandBluePrimary,
-                  fontWeight = FontWeight.SemiBold,
-                )
-              }
+              Text(
+                text = stringResource(id = R.string.anti_screenshot_title),
+                style = MaterialTheme.typography.titleMedium,
+                color = BrandBlueDark,
+              )
+              Spacer(modifier = Modifier.width(8.dp))
               Surface(
                 shape = RoundedCornerShape(50),
-                color = BrandBlueSoftContainer,
+                color = if (antiScreenshotEnabled) BrandBluePrimary else SlateBorder,
               ) {
-                Row(
-                  verticalAlignment = Alignment.CenterVertically,
-                  modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                ) {
-                  Icon(
-                    imageVector = Icons.Rounded.VerifiedUser,
-                    contentDescription = null,
-                    tint = BrandBlueDark,
-                    modifier = Modifier.size(14.dp),
-                  )
-                  Spacer(modifier = Modifier.width(4.dp))
-                  Text(
-                    text = stringResource(id = R.string.about_host_value),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = BrandBlueDark,
-                  )
-                }
+                Text(
+                  text =
+                    stringResource(
+                      id = if (antiScreenshotEnabled) R.string.status_on else R.string.status_off
+                    ),
+                  style = MaterialTheme.typography.labelMedium,
+                  color = PureWhite,
+                  modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                )
               }
             }
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             Text(
-              text = stringResource(id = R.string.about_apk_protection),
+              text = stringResource(id = R.string.anti_screenshot_desc),
               style = MaterialTheme.typography.bodySmall,
               color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
           }
+          Spacer(modifier = Modifier.width(12.dp))
+          Switch(
+            checked = antiScreenshotEnabled,
+            onCheckedChange = onToggleAntiScreenshot,
+            colors =
+              SwitchDefaults.colors(
+                checkedThumbColor = PureWhite,
+                checkedTrackColor = BrandBluePrimary,
+                uncheckedThumbColor = PureWhite,
+                uncheckedTrackColor = SlateBorder,
+                uncheckedBorderColor = SlateBorder,
+              ),
+            modifier = Modifier.testTag("anti_screenshot_switch"),
+          )
+        }
+      }
+
+      Spacer(modifier = Modifier.height(20.dp))
+
+      // Read-only automatic device security status
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+          imageVector = Icons.Rounded.Shield,
+          contentDescription = null,
+          tint = BrandBluePrimary,
+          modifier = Modifier.size(18.dp),
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+          text = stringResource(id = R.string.security_status_section_title),
+          style = MaterialTheme.typography.labelMedium,
+          color = BrandBlueDark,
+        )
+      }
+
+      Spacer(modifier = Modifier.height(10.dp))
+
+      Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = SoftWhiteBackground,
+        border = BorderStroke(1.dp, SlateBorder),
+        modifier = Modifier.fillMaxWidth(),
+      ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+          SecurityCheckRow(
+            label = stringResource(id = R.string.flag_root_magisk),
+            detected = deviceIntegrityReport.isRootOrMagiskSuspected,
+          )
+          HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = SlateBorder)
+          SecurityCheckRow(
+            label = stringResource(id = R.string.flag_dev_options),
+            detected = deviceIntegrityReport.isDeveloperOptionsEnabled,
+          )
+          HorizontalDivider(modifier = Modifier.padding(vertical = 10.dp), color = SlateBorder)
+          SecurityCheckRow(
+            label = stringResource(id = R.string.flag_usb_debugging),
+            detected = deviceIntegrityReport.isUsbDebuggingEnabled,
+          )
+          Spacer(modifier = Modifier.height(12.dp))
+          Text(
+            text = stringResource(id = R.string.security_disclaimer),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+      }
+
+      Spacer(modifier = Modifier.height(20.dp))
+
+      // Read-only app & APK protection info
+      Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(
+          imageVector = Icons.Rounded.Info,
+          contentDescription = null,
+          tint = BrandBluePrimary,
+          modifier = Modifier.size(18.dp),
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+          text = stringResource(id = R.string.about_section_title),
+          style = MaterialTheme.typography.labelMedium,
+          color = BrandBlueDark,
+        )
+      }
+
+      Spacer(modifier = Modifier.height(10.dp))
+
+      Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = SoftWhiteBackground,
+        border = BorderStroke(1.dp, SlateBorder),
+        modifier = Modifier.fillMaxWidth(),
+      ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+          Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(modifier = Modifier.weight(1f)) {
+              Text(
+                text = stringResource(id = R.string.app_name),
+                style = MaterialTheme.typography.titleMedium,
+                color = BrandBlueDark,
+              )
+              Text(
+                text = stringResource(id = R.string.version_label),
+                style = MaterialTheme.typography.bodySmall,
+                color = BrandBluePrimary,
+                fontWeight = FontWeight.SemiBold,
+              )
+            }
+            Surface(
+              shape = RoundedCornerShape(50),
+              color = BrandBlueSoftContainer,
+            ) {
+              Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+              ) {
+                Icon(
+                  imageVector = Icons.Rounded.VerifiedUser,
+                  contentDescription = null,
+                  tint = BrandBlueDark,
+                  modifier = Modifier.size(14.dp),
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                  text = stringResource(id = R.string.about_host_value),
+                  style = MaterialTheme.typography.labelMedium,
+                  color = BrandBlueDark,
+                )
+              }
+            }
+          }
+          Spacer(modifier = Modifier.height(10.dp))
+          Text(
+            text = stringResource(id = R.string.about_apk_protection),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
         }
       }
     }

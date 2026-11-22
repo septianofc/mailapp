@@ -14,11 +14,10 @@ import com.example.security.AndroidDeviceSecurityInspector
 import com.example.security.DeviceIntegrityReport
 import com.example.security.DeviceSecurityInspector
 import com.example.ui.AppLockState
-import com.example.ui.MainUiState
 import com.example.ui.MainViewModel
 import com.example.ui.components.AppLockScreen
 import com.example.ui.components.SecurityBlockedScreen
-import com.example.ui.components.SettingsSheet
+import com.example.ui.components.SettingsSheetContent
 import com.example.ui.theme.MailSeptianSupportTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -41,7 +40,7 @@ import org.robolectric.annotation.Config
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [36])
+@Config(sdk = [34])
 class SecurityAndUiRobolectricTest {
 
   @get:Rule val composeTestRule = createComposeRule()
@@ -114,7 +113,7 @@ class SecurityAndUiRobolectricTest {
     var toggledValue: Boolean? = null
     composeTestRule.setContent {
       MailSeptianSupportTheme {
-        SettingsSheet(
+        SettingsSheetContent(
           antiScreenshotEnabled = true,
           deviceIntegrityReport = DeviceIntegrityReport(isDeveloperOptionsEnabled = true),
           onToggleAntiScreenshot = { toggledValue = it },
@@ -124,7 +123,7 @@ class SecurityAndUiRobolectricTest {
     }
     composeTestRule.waitForIdle()
 
-    composeTestRule.onNodeWithTag("settings_sheet").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("settings_sheet_content").assertIsDisplayed()
     composeTestRule.onNodeWithTag("anti_screenshot_switch").assertIsOn()
     composeTestRule.onNodeWithTag("anti_screenshot_switch").performClick()
     composeTestRule.waitForIdle()
@@ -191,7 +190,7 @@ class SecurityAndUiRobolectricTest {
   fun `settings sheet shows off state when anti screenshot disabled`() {
     composeTestRule.setContent {
       MailSeptianSupportTheme {
-        SettingsSheet(
+        SettingsSheetContent(
           antiScreenshotEnabled = false,
           deviceIntegrityReport = DeviceIntegrityReport(),
           onToggleAntiScreenshot = {},

@@ -69,10 +69,12 @@ object AppLockManager {
           onFinished()
           when (errorCode) {
             BiometricPrompt.ERROR_USER_CANCELED,
-            BiometricPrompt.ERROR_CANCELED,
             BiometricPrompt.ERROR_NEGATIVE_BUTTON -> {
-              // User canceled system PIN/Fingerprint prompt -> exit the APK immediately
+              // User explicitly canceled OS PIN/Biometric prompt -> exit APK immediately
               onCancelExit()
+            }
+            BiometricPrompt.ERROR_CANCELED -> {
+              // System-initiated cancellation (e.g., focus change) stays locked without error spam
             }
             else -> onError(errString.toString())
           }
