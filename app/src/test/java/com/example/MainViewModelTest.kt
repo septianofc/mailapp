@@ -179,6 +179,12 @@ class MainViewModelTest {
       vm.retryWebLoad()
       assertEquals(WebErrorState.None, vm.uiState.value.webErrorState)
       assertEquals(1, vm.uiState.value.reloadTrigger)
+
+      vm.onWebNetworkError("Gangguan server")
+      assertTrue(vm.uiState.value.webErrorState is WebErrorState.NetworkError)
+      vm.goHomeWebLoad()
+      assertEquals(WebErrorState.None, vm.uiState.value.webErrorState)
+      assertEquals(1, vm.uiState.value.goHomeTrigger)
     }
 
   @Test

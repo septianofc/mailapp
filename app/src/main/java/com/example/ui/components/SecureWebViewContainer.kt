@@ -34,11 +34,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.GppBad
+import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -47,14 +50,17 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,6 +76,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import com.example.BuildConfig
 import com.example.R
 import com.example.security.SafeLogger
+import com.example.security.WebCacheManager
+import com.example.security.WebPageErrorDetector
+import com.example.security.WebPageErrorDetector.DetectedErrorKind
 import com.example.security.WebViewUrlPolicy
 import com.example.ui.WebErrorState
 import com.example.ui.theme.BrandBlueBorder
@@ -82,11 +91,38 @@ import com.example.ui.theme.SecurityDangerRed
 import com.example.ui.theme.SecurityDangerRedContainer
 import com.example.ui.theme.SoftWhiteBackground
 import java.io.ByteArrayInputStream
+import java.util.concurrent.atomic.AtomicBoolean
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import org.json.JSONObject
+import org.json.JSONTokener
+
+private const val ABOUT_BLANK = "about:blank"
+
+private const val PAGE_INSPECTION_JS = """
+  (function() {
+    try {
+      var title = (document.title || '').trim();
+      var bodyText = (document.body && document.body.innerText ? document.body.innerText : '').trim();
+      var html = (document.documentElement && document.documentElement.outerHTML ? document.documentElement.outerHTML : '');
+      return {
+        title: title,
+        snippet: bodyText.substring(0, 750),
+        length: bodyText.length,
+        html: html.length <= 500000 ? html : ''
+      };
+    } catch (e) {
+      return { title: '', snippet: '', length: 0, html: '' };
+    }
+  })();
+"""
 
 @Composable
 fun SecureWebViewContainer(
   webErrorState: WebErrorState,
+  isNetworkOnline: Boolean,
   reloadTrigger: Int,
+  goHomeTrigger: Int,
   blockedNotice: String?,
   onPageStarted: () -> Unit,
   onPageFinished: () -> Unit,
@@ -95,16 +131,25 @@ fun SecureWebViewContainer(
   onNavigationBlocked: (String) -> Unit,
   onClearBlockedNotice: () -> Unit,
   onRetry: () -> Unit,
+  onGoHome: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val context = LocalContext.current
+  val ioScope = rememberCoroutineScope()
+  val webCacheManager = remember(context) { WebCacheManager(context) }
+  val onlineFlag = remember { AtomicBoolean(isNetworkOnline) }
+
   var webViewRef by remember { mutableStateOf<WebView?>(null) }
   var canGoBack by remember { mutableStateOf(false) }
+  var lastAttemptedUrl by remember { mutableStateOf(WebViewUrlPolicy.ENTRY_URL) }
   var lastValidUrl by remember { mutableStateOf(WebViewUrlPolicy.ENTRY_URL) }
 
-  // Keeps WebView invisible until a valid HTTP 2xx/3xx page renders cleanly.
-  // Any network, HTTP >= 400 (including Cloudflare 525 / ERR_HTTP_RESPONSE_CODE_FAILURE),
-  // or SSL error immediately masks the WebView behind native UI so no browser chrome or URL is exposed.
+  // Tracks URL that just failed so Chromium's subsequent internal error-page onPageStarted/Finish
+  // cannot wipe out the active native error overlay or expose "Halaman web tidak tersedia".
+  var lastFailedUrl by remember { mutableStateOf<String?>(null) }
+  var lastFailedAtMs by remember { mutableLongStateOf(0L) }
+
+  // Keeps WebView invisible until both network/HTTP checks AND DOM error inspection succeed.
   var isPageVisible by remember { mutableStateOf(false) }
   var currentLoadHadError by remember { mutableStateOf(false) }
 
@@ -115,6 +160,12 @@ fun SecureWebViewContainer(
   val notFoundMsg = stringResource(id = R.string.webview_error_not_found)
   val forbiddenMsg = stringResource(id = R.string.webview_error_forbidden)
   val genericErrorMsg = stringResource(id = R.string.webview_error_generic)
+
+  LaunchedEffect(isNetworkOnline) {
+    onlineFlag.set(isNetworkOnline)
+    webViewRef?.settings?.cacheMode =
+      if (isNetworkOnline) WebSettings.LOAD_DEFAULT else WebSettings.LOAD_CACHE_ELSE_NETWORK
+  }
 
   BackHandler(enabled = canGoBack) {
     webViewRef?.let { webView ->
@@ -127,10 +178,34 @@ fun SecureWebViewContainer(
   LaunchedEffect(reloadTrigger) {
     if (reloadTrigger > 0) {
       webViewRef?.let { webView ->
+        lastFailedUrl = null
+        lastFailedAtMs = 0L
         isPageVisible = false
         currentLoadHadError = false
         webView.visibility = View.INVISIBLE
-        webView.loadUrl(lastValidUrl)
+        val target =
+          if (WebViewUrlPolicy.isAllowedNavigationUrl(lastAttemptedUrl)) {
+            lastAttemptedUrl
+          } else {
+            WebViewUrlPolicy.ENTRY_URL
+          }
+        webView.loadUrl(target)
+      }
+    }
+  }
+
+  LaunchedEffect(goHomeTrigger) {
+    if (goHomeTrigger > 0) {
+      webViewRef?.let { webView ->
+        lastFailedUrl = null
+        lastFailedAtMs = 0L
+        isPageVisible = false
+        currentLoadHadError = false
+        lastAttemptedUrl = WebViewUrlPolicy.ENTRY_URL
+        lastValidUrl = WebViewUrlPolicy.ENTRY_URL
+        webView.visibility = View.INVISIBLE
+        webView.clearHistory()
+        webView.loadUrl(WebViewUrlPolicy.ENTRY_URL)
       }
     }
   }
@@ -169,8 +244,36 @@ fun SecureWebViewContainer(
           isHorizontalScrollBarEnabled = false
           overScrollMode = View.OVER_SCROLL_NEVER
 
-          configureHardenedSettings(this)
+          configureHardenedSettings(this, onlineFlag.get())
           configureSecureCookies(this)
+
+          fun triggerNativeFailure(
+            view: WebView?,
+            failedUrl: String?,
+            message: String,
+            isSsl: Boolean = false,
+          ) {
+            currentLoadHadError = true
+            isPageVisible = false
+            if (!failedUrl.isNullOrBlank() && failedUrl != ABOUT_BLANK) {
+              lastFailedUrl = failedUrl
+              lastFailedAtMs = System.currentTimeMillis()
+            }
+            view?.visibility = View.INVISIBLE
+            view?.stopLoading()
+            // Replace Chromium's internal error buffer immediately so "Halaman web tidak tersedia"
+            // or raw URLs can never render beneath/during state transitions.
+            view?.post {
+              if (view.url != ABOUT_BLANK) {
+                view.loadUrl(ABOUT_BLANK)
+              }
+            }
+            if (isSsl) {
+              onSslError()
+            } else {
+              onNetworkError(message)
+            }
+          }
 
           webViewClient =
             object : WebViewClient() {
@@ -180,6 +283,9 @@ fun SecureWebViewContainer(
               ): Boolean {
                 val url = request?.url?.toString()
                 return if (WebViewUrlPolicy.isAllowedNavigationUrl(url)) {
+                  if (url?.contains("logout", ignoreCase = true) == true) {
+                    webCacheManager.clearHtmlSnapshots()
+                  }
                   false
                 } else {
                   SafeLogger.w("Blocked navigation outside allowlist/HTTPS")
@@ -194,12 +300,13 @@ fun SecureWebViewContainer(
                 view: WebView?,
                 request: WebResourceRequest?,
               ): WebResourceResponse? {
-                val url = request?.url?.toString()
-                return if (WebViewUrlPolicy.isAllowedSubresourceUrl(url)) {
-                  null
-                } else {
+                if (request == null) return null
+                val url = request.url?.toString()
+                if (url == ABOUT_BLANK) return null
+
+                if (!WebViewUrlPolicy.isAllowedSubresourceUrl(url)) {
                   SafeLogger.w("Blocked non-HTTPS or disallowed subresource scheme")
-                  WebResourceResponse(
+                  return WebResourceResponse(
                     "text/plain",
                     "utf-8",
                     403,
@@ -208,16 +315,34 @@ fun SecureWebViewContainer(
                     ByteArrayInputStream(ByteArray(0)),
                   )
                 }
+
+                // Serve ETag-cached static assets and offline visited HTML snapshots
+                return webCacheManager.interceptGetRequest(
+                  request = request,
+                  isOnline = onlineFlag.get(),
+                )
               }
 
               override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                if (url.isNullOrBlank() || url == ABOUT_BLANK) {
+                  return
+                }
                 if (!WebViewUrlPolicy.isAllowedNavigationUrl(url)) {
                   view?.stopLoading()
                   return
                 }
-                if (url != null) {
-                  lastValidUrl = url
+
+                // Guard against Chromium re-invoking onPageStarted for its built-in error page
+                // on the exact URL that just failed moments earlier.
+                val isRecentFailedUrl =
+                  url == lastFailedUrl && (System.currentTimeMillis() - lastFailedAtMs) < 2500L
+                if (isRecentFailedUrl) {
+                  view?.visibility = View.INVISIBLE
+                  view?.stopLoading()
+                  return
                 }
+
+                lastAttemptedUrl = url
                 currentLoadHadError = false
                 isPageVisible = false
                 view?.visibility = View.INVISIBLE
@@ -226,15 +351,72 @@ fun SecureWebViewContainer(
               }
 
               override fun onPageFinished(view: WebView?, url: String?) {
-                canGoBack = view?.canGoBack() == true
-                CookieManager.getInstance().flush()
-                if (!currentLoadHadError && WebViewUrlPolicy.isAllowedNavigationUrl(url)) {
-                  view?.visibility = View.VISIBLE
-                  isPageVisible = true
-                  onPageFinished()
-                } else {
+                if (url.isNullOrBlank() || url == ABOUT_BLANK) {
                   view?.visibility = View.INVISIBLE
                   isPageVisible = false
+                  return
+                }
+                canGoBack = view?.canGoBack() == true
+                CookieManager.getInstance().flush()
+
+                if (currentLoadHadError || !WebViewUrlPolicy.isAllowedNavigationUrl(url)) {
+                  view?.visibility = View.INVISIBLE
+                  isPageVisible = false
+                  return
+                }
+
+                // Inspect rendered DOM before ever making WebView visible.
+                // Blocks Chromium error pages, Cloudflare 52x, HTTP 5xx/4xx HTML, PHP fatals, and blanks.
+                val inspectedView = view ?: return
+                inspectedView.evaluateJavascript(PAGE_INSPECTION_JS) { rawResult ->
+                  if (currentLoadHadError || inspectedView.url == ABOUT_BLANK) {
+                    inspectedView.visibility = View.INVISIBLE
+                    isPageVisible = false
+                    return@evaluateJavascript
+                  }
+
+                  val parsed = parseInspectionJson(rawResult)
+                  val title = parsed?.optString("title").orEmpty()
+                  val snippet = parsed?.optString("snippet").orEmpty()
+                  val bodyLength = parsed?.optInt("length", 0) ?: 0
+                  val html = parsed?.optString("html").orEmpty()
+
+                  val detected =
+                    WebPageErrorDetector.detectError(
+                      title = title,
+                      bodySnippet = snippet,
+                      bodyLength = bodyLength,
+                    )
+
+                  if (detected != null) {
+                    SafeLogger.w("Blocked rendered error page kind=$detected")
+                    val friendly =
+                      when (detected) {
+                        DetectedErrorKind.CHROMIUM_DISCONNECTED -> disconnectedMsg
+                        DetectedErrorKind.CHROMIUM_TIMEOUT -> timeoutMsg
+                        DetectedErrorKind.NOT_FOUND -> notFoundMsg
+                        DetectedErrorKind.FORBIDDEN -> forbiddenMsg
+                        DetectedErrorKind.SSL_OR_HANDSHAKE -> ""
+                        DetectedErrorKind.SERVER_OR_HTTP_ERROR -> serverErrorMsg
+                        DetectedErrorKind.EMPTY_PAGE -> genericErrorMsg
+                      }
+                    triggerNativeFailure(
+                      view = inspectedView,
+                      failedUrl = url,
+                      message = friendly,
+                      isSsl = detected == DetectedErrorKind.SSL_OR_HANDSHAKE,
+                    )
+                  } else {
+                    lastValidUrl = url
+                    if (html.isNotBlank() && !url.contains("logout", ignoreCase = true)) {
+                      ioScope.launch(Dispatchers.IO) {
+                        webCacheManager.saveHtmlSnapshot(url = url, html = html)
+                      }
+                    }
+                    inspectedView.visibility = View.VISIBLE
+                    isPageVisible = true
+                    onPageFinished()
+                  }
                 }
               }
 
@@ -244,10 +426,7 @@ fun SecureWebViewContainer(
                 error: WebResourceError?,
               ) {
                 if (request?.isForMainFrame == true) {
-                  currentLoadHadError = true
-                  isPageVisible = false
-                  view?.visibility = View.INVISIBLE
-
+                  val failedUrl = request.url?.toString()
                   val errorCode = error?.errorCode ?: ERROR_UNKNOWN
                   val rawDesc = error?.description?.toString().orEmpty()
                   SafeLogger.w("WebView main-frame error code=$errorCode")
@@ -261,7 +440,7 @@ fun SecureWebViewContainer(
                       serverErrorMsg = serverErrorMsg,
                       genericMsg = genericErrorMsg,
                     )
-                  onNetworkError(friendlyMessage)
+                  triggerNativeFailure(view = view, failedUrl = failedUrl, message = friendlyMessage)
                 }
               }
 
@@ -272,9 +451,7 @@ fun SecureWebViewContainer(
               ) {
                 val statusCode = errorResponse?.statusCode ?: 0
                 if (request?.isForMainFrame == true && statusCode >= 400) {
-                  currentLoadHadError = true
-                  isPageVisible = false
-                  view?.visibility = View.INVISIBLE
+                  val failedUrl = request.url?.toString()
                   SafeLogger.w("WebView main-frame HTTP error status=$statusCode")
 
                   val friendlyMessage =
@@ -284,7 +461,7 @@ fun SecureWebViewContainer(
                       in 500..599 -> serverErrorMsg
                       else -> genericErrorMsg
                     }
-                  onNetworkError(friendlyMessage)
+                  triggerNativeFailure(view = view, failedUrl = failedUrl, message = friendlyMessage)
                 }
               }
 
@@ -295,21 +472,24 @@ fun SecureWebViewContainer(
               ) {
                 // Strictly refuse untrusted SSL certificates — NEVER call handler.proceed()
                 handler?.cancel()
-                currentLoadHadError = true
-                isPageVisible = false
-                view?.visibility = View.INVISIBLE
                 SafeLogger.w("Strict SSL validation rejected certificate error=${error?.primaryError}")
-                onSslError()
+                triggerNativeFailure(
+                  view = view,
+                  failedUrl = error?.url ?: lastAttemptedUrl,
+                  message = "",
+                  isSsl = true,
+                )
               }
 
               override fun onRenderProcessGone(
                 view: WebView?,
                 detail: RenderProcessGoneDetail?,
               ): Boolean {
-                currentLoadHadError = true
-                isPageVisible = false
-                view?.visibility = View.INVISIBLE
-                onNetworkError(genericErrorMsg)
+                triggerNativeFailure(
+                  view = view,
+                  failedUrl = lastAttemptedUrl,
+                  message = genericErrorMsg,
+                )
                 return true
               }
             }
@@ -320,6 +500,9 @@ fun SecureWebViewContainer(
       },
       update = { webView ->
         webViewRef = webView
+        onlineFlag.set(isNetworkOnline)
+        webView.settings.cacheMode =
+          if (isNetworkOnline) WebSettings.LOAD_DEFAULT else WebSettings.LOAD_CACHE_ELSE_NETWORK
         webView.visibility =
           if (isPageVisible && webErrorState is WebErrorState.None) View.VISIBLE else View.INVISIBLE
       },
@@ -394,11 +577,24 @@ fun SecureWebViewContainer(
     if (webErrorState !is WebErrorState.None) {
       WebErrorOverlay(
         errorState = webErrorState,
+        onGoHome = onGoHome,
         onRetry = onRetry,
         modifier = Modifier.fillMaxSize(),
       )
     }
   }
+}
+
+private fun parseInspectionJson(rawResult: String?): JSONObject? {
+  if (rawResult.isNullOrBlank() || rawResult == "null") return null
+  return runCatching {
+    val parsed = JSONTokener(rawResult).nextValue()
+    when (parsed) {
+      is JSONObject -> parsed
+      is String -> JSONObject(parsed)
+      else -> null
+    }
+  }.getOrNull()
 }
 
 private fun mapFriendlyNetworkErrorMessage(
@@ -426,7 +622,7 @@ private fun mapFriendlyNetworkErrorMessage(
 }
 
 @SuppressLint("SetJavaScriptEnabled")
-private fun configureHardenedSettings(webView: WebView) {
+private fun configureHardenedSettings(webView: WebView, isNetworkOnline: Boolean) {
   webView.removeJavascriptInterface("searchBoxJavaBridge_")
   webView.removeJavascriptInterface("accessibility")
   webView.removeJavascriptInterface("accessibilityTraversal")
@@ -450,7 +646,8 @@ private fun configureHardenedSettings(webView: WebView) {
     setGeolocationEnabled(false)
     @Suppress("DEPRECATION")
     saveFormData = false
-    cacheMode = WebSettings.LOAD_DEFAULT
+    cacheMode =
+      if (isNetworkOnline) WebSettings.LOAD_DEFAULT else WebSettings.LOAD_CACHE_ELSE_NETWORK
 
     useWideViewPort = true
     loadWithOverviewMode = true
@@ -470,8 +667,9 @@ private fun configureSecureCookies(webView: WebView) {
 }
 
 @Composable
-private fun WebErrorOverlay(
+fun WebErrorOverlay(
   errorState: WebErrorState,
+  onGoHome: () -> Unit,
   onRetry: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -494,7 +692,7 @@ private fun WebErrorOverlay(
       Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
-        modifier = Modifier.padding(24.dp),
+        modifier = Modifier.verticalScroll(rememberScrollState()).padding(24.dp),
       ) {
         Surface(
           shape = RoundedCornerShape(18.dp),
@@ -539,18 +737,39 @@ private fun WebErrorOverlay(
         Spacer(modifier = Modifier.height(22.dp))
 
         Button(
-          onClick = onRetry,
+          onClick = onGoHome,
           colors = ButtonDefaults.buttonColors(containerColor = BrandBluePrimary),
+          shape = RoundedCornerShape(14.dp),
+          modifier = Modifier.fillMaxWidth().height(48.dp).testTag("webview_go_home_button"),
+        ) {
+          Icon(
+            imageVector = Icons.Rounded.Home,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+          )
+          Spacer(modifier = Modifier.width(8.dp))
+          Text(text = stringResource(id = R.string.webview_error_go_home))
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        OutlinedButton(
+          onClick = onRetry,
+          border = BorderStroke(1.dp, BrandBlueBorder),
           shape = RoundedCornerShape(14.dp),
           modifier = Modifier.fillMaxWidth().height(48.dp).testTag("webview_retry_button"),
         ) {
           Icon(
             imageVector = Icons.Rounded.Refresh,
             contentDescription = null,
+            tint = BrandBlueDark,
             modifier = Modifier.size(18.dp),
           )
           Spacer(modifier = Modifier.width(8.dp))
-          Text(text = stringResource(id = R.string.webview_error_retry))
+          Text(
+            text = stringResource(id = R.string.webview_error_retry),
+            color = BrandBlueDark,
+          )
         }
       }
     }

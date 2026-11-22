@@ -53,6 +53,7 @@ data class MainUiState(
   val blockedNavigationCount: Int = 0,
   val lastBlockedNotice: String? = null,
   val reloadTrigger: Int = 0,
+  val goHomeTrigger: Int = 0,
   val unlockedWithoutDeviceLock: Boolean = false,
   val networkStatus: NetworkStatus = NetworkStatus.Online,
   val isNetworkBannerVisible: Boolean = false,
@@ -379,6 +380,16 @@ class MainViewModel(
         webErrorState = WebErrorState.None,
         isWebLoading = true,
         reloadTrigger = it.reloadTrigger + 1,
+      )
+    }
+  }
+
+  fun goHomeWebLoad() {
+    _uiState.update {
+      it.copy(
+        webErrorState = WebErrorState.None,
+        isWebLoading = true,
+        goHomeTrigger = it.goHomeTrigger + 1,
       )
     }
   }

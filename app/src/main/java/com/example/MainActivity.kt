@@ -126,6 +126,7 @@ class MainActivity : FragmentActivity() {
           onNavigationBlocked = { notice -> viewModel.onNavigationBlocked(notice) },
           onClearBlockedNotice = { viewModel.clearBlockedNotice() },
           onRetryWebLoad = { viewModel.retryWebLoad() },
+          onGoHomeWebLoad = { viewModel.goHomeWebLoad() },
         )
       }
     }

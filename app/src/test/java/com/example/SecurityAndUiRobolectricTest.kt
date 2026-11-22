@@ -19,10 +19,12 @@ import com.example.security.DeviceSecurityInspector
 import com.example.security.NetworkStatus
 import com.example.ui.AppLockState
 import com.example.ui.MainViewModel
+import com.example.ui.WebErrorState
 import com.example.ui.components.AppLockScreen
 import com.example.ui.components.NetworkStatusBanner
 import com.example.ui.components.SecurityBlockedScreen
 import com.example.ui.components.SettingsSheetContent
+import com.example.ui.components.WebErrorOverlay
 import com.example.ui.theme.MailSeptianSupportTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -281,5 +283,27 @@ class SecurityAndUiRobolectricTest {
     composeTestRule
       .onNodeWithText("Kembali online", substring = true, useUnmergedTree = true)
       .assertIsDisplayed()
+  }
+
+  @Test
+  fun `web error overlay triggers go home and retry actions`() {
+    var goHomeClicked = false
+    var retryClicked = false
+    composeTestRule.setContent {
+      MailSeptianSupportTheme {
+        WebErrorOverlay(
+          errorState = WebErrorState.NetworkError("Halaman mengalami gangguan server."),
+          onGoHome = { goHomeClicked = true },
+          onRetry = { retryClicked = true },
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("webview_error_overlay").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("webview_go_home_button").performScrollTo().performClick()
+    composeTestRule.onNodeWithTag("webview_retry_button").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    assertTrue(goHomeClicked)
+    assertTrue(retryClicked)
   }
 }

@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.example.R
+import com.example.security.NetworkStatus
 import com.example.ui.components.AppLockScreen
 import com.example.ui.components.NetworkStatusBanner
 import com.example.ui.components.SecureWebViewContainer
@@ -60,6 +61,7 @@ fun MailSeptianApp(
   onNavigationBlocked: (String) -> Unit,
   onClearBlockedNotice: () -> Unit,
   onRetryWebLoad: () -> Unit,
+  onGoHomeWebLoad: () -> Unit = {},
 ) {
   val isPortalActive =
     !uiState.showSplash &&
@@ -107,7 +109,9 @@ fun MailSeptianApp(
         ) {
           SecureWebViewContainer(
             webErrorState = uiState.webErrorState,
+            isNetworkOnline = uiState.networkStatus != NetworkStatus.Offline,
             reloadTrigger = uiState.reloadTrigger,
+            goHomeTrigger = uiState.goHomeTrigger,
             blockedNotice = uiState.lastBlockedNotice,
             onPageStarted = onWebPageStarted,
             onPageFinished = onWebPageFinished,
@@ -116,6 +120,7 @@ fun MailSeptianApp(
             onNavigationBlocked = onNavigationBlocked,
             onClearBlockedNotice = onClearBlockedNotice,
             onRetry = onRetryWebLoad,
+            onGoHome = onGoHomeWebLoad,
             modifier = Modifier.fillMaxSize(),
           )
 
