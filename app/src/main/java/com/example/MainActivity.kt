@@ -75,9 +75,14 @@ class MainActivity : FragmentActivity() {
         applyFlagSecure(uiState.antiScreenshotEnabled)
       }
 
-      LaunchedEffect(uiState.showSplash, uiState.appLockState) {
+      LaunchedEffect(
+        uiState.showSplash,
+        uiState.appLockState,
+        uiState.deviceIntegrityReport.hasAnyWarning,
+      ) {
         if (
           !uiState.showSplash &&
+            !uiState.deviceIntegrityReport.hasAnyWarning &&
             uiState.appLockState is AppLockState.Locked &&
             !autoPromptIssuedForCurrentLock
         ) {
@@ -91,17 +96,22 @@ class MainActivity : FragmentActivity() {
           uiState = uiState,
           onTriggerBiometricUnlock = { launchBiometricPrompt() },
           onOpenDeviceSecuritySettings = { openDeviceSecuritySettings() },
+          onOpenDeviceDeveloperSettings = { openDeveloperOrSystemSettings() },
           onRecheckLockCapability = {
             refreshLockCapability()
-            if (viewModel.uiState.value.appLockState is AppLockState.Locked) {
+            if (
+              !viewModel.uiState.value.deviceIntegrityReport.hasAnyWarning &&
+                viewModel.uiState.value.appLockState is AppLockState.Locked
+            ) {
               launchBiometricPrompt()
             }
           },
+          onRecheckDeviceIntegrity = { viewModel.refreshDeviceIntegrity() },
           onContinueWithoutCredential = { viewModel.onContinueWithoutDeviceCredential() },
+          onExitApp = { exitApplication() },
           onToggleAntiScreenshot = { enabled -> viewModel.setAntiScreenshotEnabled(enabled) },
           onOpenSettings = { viewModel.setSettingsOpen(true) },
           onCloseSettings = { viewModel.setSettingsOpen(false) },
-          onToggleWarningExpanded = { viewModel.toggleWarningExpanded() },
           onWebProgressChanged = { progress -> viewModel.onWebProgressChanged(progress) },
           onWebPageStarted = { viewModel.onWebPageStarted() },
           onWebPageFinished = { viewModel.onWebPageFinished() },
@@ -129,6 +139,7 @@ class MainActivity : FragmentActivity() {
   }
 
   private fun launchBiometricPrompt() {
+    if (viewModel.uiState.value.deviceIntegrityReport.hasAnyWarning) return
     val capability = AppLockManager.checkCapability(this)
     if (capability != AppLockCapability.Available) {
       viewModel.updateAppLockCapability(capability)
@@ -142,9 +153,14 @@ class MainActivity : FragmentActivity() {
       title = getString(R.string.applock_prompt_title),
       subtitle = getString(R.string.applock_prompt_subtitle),
       onSuccess = { viewModel.onUnlockSucceeded() },
+      onCancelExit = { exitApplication() },
       onError = { message -> viewModel.onUnlockFailed(message) },
       onFinished = { viewModel.onAuthenticationFinished() },
     )
+  }
+
+  private fun exitApplication() {
+    finishAndRemoveTask()
   }
 
   private fun openDeviceSecuritySettings() {
@@ -161,7 +177,14 @@ class MainActivity : FragmentActivity() {
       }
     runCatching { startActivity(intent) }
       .onFailure {
-        runCatching { startActivity(Intent(Settings.ACTION_SECURITY_SETTINGS)) }
+        runCatching { startActivity(Intent(Settings.ACTION_SETTINGS)) }
+      }
+  }
+
+  private fun openDeveloperOrSystemSettings() {
+    runCatching { startActivity(Intent(Settings.ACTION_APPLICATION_DEVELOPMENT_SETTINGS)) }
+      .onFailure {
+        runCatching { startActivity(Intent(Settings.ACTION_SETTINGS)) }
       }
   }
 }

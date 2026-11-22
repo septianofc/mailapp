@@ -1,12 +1,12 @@
 package com.example.ui.components
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -21,11 +21,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ExitToApp
 import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -48,35 +48,35 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.R
-import com.example.security.DeviceIntegrityReport
 import com.example.ui.AppLockState
+import com.example.ui.theme.BrandBlueBorder
 import com.example.ui.theme.BrandBlueDark
 import com.example.ui.theme.BrandBluePrimary
 import com.example.ui.theme.BrandBlueSoftContainer
 import com.example.ui.theme.PureWhite
 import com.example.ui.theme.SecurityDangerRed
 import com.example.ui.theme.SecurityDangerRedContainer
-import com.example.ui.theme.SecurityWarningAmber
-import com.example.ui.theme.SecurityWarningAmberContainer
 
 @Composable
 fun AppLockScreen(
   appLockState: AppLockState,
   authErrorMessage: String?,
-  deviceIntegrityReport: DeviceIntegrityReport,
   onUnlockClick: () -> Unit,
   onOpenDeviceSecuritySettings: () -> Unit,
   onRecheckCapability: () -> Unit,
   onContinueWithoutCredential: () -> Unit,
+  onExitApp: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  BackHandler(onBack = onExitApp)
+
   Box(
     modifier =
       modifier
         .fillMaxSize()
         .background(
           Brush.verticalGradient(
-            colors = listOf(BrandBlueSoftContainer.copy(alpha = 0.45f), PureWhite, PureWhite)
+            colors = listOf(BrandBlueSoftContainer.copy(alpha = 0.65f), PureWhite, PureWhite)
           )
         )
         .safeDrawingPadding()
@@ -132,7 +132,7 @@ fun AppLockScreen(
         elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
         modifier =
           Modifier.fillMaxWidth()
-            .border(1.dp, BrandBlueSoftContainer, RoundedCornerShape(24.dp)),
+            .border(1.dp, BrandBlueBorder.copy(alpha = 0.55f), RoundedCornerShape(24.dp)),
       ) {
         Column(
           horizontalAlignment = Alignment.CenterHorizontally,
@@ -185,44 +185,6 @@ fun AppLockScreen(
             }
           }
 
-          if (deviceIntegrityReport.hasAnyWarning) {
-            Spacer(modifier = Modifier.height(14.dp))
-            Surface(
-              shape = RoundedCornerShape(12.dp),
-              color = SecurityWarningAmberContainer,
-              modifier = Modifier.fillMaxWidth(),
-            ) {
-              Row(
-                verticalAlignment = Alignment.Top,
-                modifier = Modifier.padding(12.dp),
-              ) {
-                Icon(
-                  imageVector = Icons.Rounded.Warning,
-                  contentDescription = null,
-                  tint = SecurityWarningAmber,
-                  modifier = Modifier.size(18.dp),
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                  text =
-                    buildString {
-                      val items = buildList {
-                        if (deviceIntegrityReport.isRootOrMagiskSuspected) add("Root/Magisk/SU")
-                        if (deviceIntegrityReport.isDeveloperOptionsEnabled) {
-                          add("Developer Options")
-                        }
-                        if (deviceIntegrityReport.isUsbDebuggingEnabled) add("USB Debugging")
-                      }
-                      append("Terdeteksi: ${items.joinToString(", ")}. ")
-                      append(stringResource(id = R.string.security_disclaimer))
-                    },
-                  style = MaterialTheme.typography.bodySmall,
-                  color = SecurityWarningAmber,
-                )
-              }
-            }
-          }
-
           Spacer(modifier = Modifier.height(22.dp))
 
           if (!isNoCredential && hardwareUnavailable == null) {
@@ -240,6 +202,25 @@ fun AppLockScreen(
               )
               Spacer(modifier = Modifier.width(8.dp))
               Text(text = stringResource(id = R.string.applock_button_unlock))
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            TextButton(
+              onClick = onExitApp,
+              modifier = Modifier.fillMaxWidth().height(48.dp).testTag("applock_exit_button"),
+            ) {
+              Icon(
+                imageVector = Icons.AutoMirrored.Rounded.ExitToApp,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp),
+              )
+              Spacer(modifier = Modifier.width(6.dp))
+              Text(
+                text = stringResource(id = R.string.applock_button_exit),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+              )
             }
           } else {
             Button(

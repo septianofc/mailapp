@@ -6,16 +6,12 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -31,11 +27,11 @@ import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.ui.components.AppLockScreen
 import com.example.ui.components.SecureWebViewContainer
-import com.example.ui.components.SecurityWarningBanner
+import com.example.ui.components.SecurityBlockedScreen
 import com.example.ui.components.SettingsSheet
 import com.example.ui.components.SplashOverlay
+import com.example.ui.theme.BrandBlueBorder
 import com.example.ui.theme.BrandBluePrimary
-import com.example.ui.theme.BrandBlueSoftContainer
 import com.example.ui.theme.PureWhite
 
 @Composable
@@ -43,12 +39,14 @@ fun MailSeptianApp(
   uiState: MainUiState,
   onTriggerBiometricUnlock: () -> Unit,
   onOpenDeviceSecuritySettings: () -> Unit,
+  onOpenDeviceDeveloperSettings: () -> Unit,
   onRecheckLockCapability: () -> Unit,
+  onRecheckDeviceIntegrity: () -> Unit,
   onContinueWithoutCredential: () -> Unit,
+  onExitApp: () -> Unit,
   onToggleAntiScreenshot: (Boolean) -> Unit,
   onOpenSettings: () -> Unit,
   onCloseSettings: () -> Unit,
-  onToggleWarningExpanded: () -> Unit,
   onWebProgressChanged: (Int) -> Unit,
   onWebPageStarted: () -> Unit,
   onWebPageFinished: () -> Unit,
@@ -59,46 +57,69 @@ fun MailSeptianApp(
   onRetryWebLoad: () -> Unit,
 ) {
   Box(modifier = Modifier.fillMaxSize().background(PureWhite)) {
-    // 1. Unlocked Full-Screen WebView Workspace
-    if (uiState.appLockState is AppLockState.Unlocked) {
-      Box(
-        modifier =
-          Modifier.fillMaxSize()
-            .windowInsetsPadding(WindowInsets.safeDrawing)
-            .imePadding()
-      ) {
-        SecureWebViewContainer(
-          webProgress = uiState.webProgress,
-          isWebLoading = uiState.isWebLoading,
-          webErrorState = uiState.webErrorState,
-          reloadTrigger = uiState.reloadTrigger,
-          blockedNotice = uiState.lastBlockedNotice,
-          onProgressChanged = onWebProgressChanged,
-          onPageStarted = onWebPageStarted,
-          onPageFinished = onWebPageFinished,
-          onNetworkError = onWebNetworkError,
-          onSslError = onWebSslError,
-          onNavigationBlocked = onNavigationBlocked,
-          onClearBlockedNotice = onClearBlockedNotice,
-          onRetry = onRetryWebLoad,
-          modifier = Modifier.fillMaxSize(),
+    when {
+      uiState.showSplash -> {
+        // Rendered via AnimatedVisibility below
+      }
+      // 1. Strict full-screen block whenever Root, Magisk, Superuser, Developer Options,
+      //    or USB Debugging is detected (no toggle to bypass).
+      uiState.deviceIntegrityReport.hasAnyWarning -> {
+        SecurityBlockedScreen(
+          report = uiState.deviceIntegrityReport,
+          onOpenDeviceSettings = onOpenDeviceDeveloperSettings,
+          onRecheckSecurity = onRecheckDeviceIntegrity,
+          onExitApp = onExitApp,
         )
-
-        // Top overlay: Minimal top-left settings button + automatic security warning banner
-        Row(
-          verticalAlignment = Alignment.Top,
+      }
+      // 2. App Lock gate
+      uiState.appLockState !is AppLockState.Unlocked -> {
+        AppLockScreen(
+          appLockState = uiState.appLockState,
+          authErrorMessage = uiState.authErrorMessage,
+          onUnlockClick = onTriggerBiometricUnlock,
+          onOpenDeviceSecuritySettings = onOpenDeviceSecuritySettings,
+          onRecheckCapability = onRecheckLockCapability,
+          onContinueWithoutCredential = onContinueWithoutCredential,
+          onExitApp = onExitApp,
+        )
+      }
+      // 3. Unlocked Full-Screen WebView Workspace + Top-Right Settings button
+      else -> {
+        Box(
           modifier =
-            Modifier.fillMaxWidth()
-              .align(Alignment.TopStart)
-              .padding(horizontal = 12.dp, vertical = 10.dp),
+            Modifier.fillMaxSize()
+              .windowInsetsPadding(WindowInsets.safeDrawing)
+              .imePadding()
         ) {
+          SecureWebViewContainer(
+            webProgress = uiState.webProgress,
+            isWebLoading = uiState.isWebLoading,
+            webErrorState = uiState.webErrorState,
+            reloadTrigger = uiState.reloadTrigger,
+            blockedNotice = uiState.lastBlockedNotice,
+            onProgressChanged = onWebProgressChanged,
+            onPageStarted = onWebPageStarted,
+            onPageFinished = onWebPageFinished,
+            onNetworkError = onWebNetworkError,
+            onSslError = onWebSslError,
+            onNavigationBlocked = onNavigationBlocked,
+            onClearBlockedNotice = onClearBlockedNotice,
+            onRetry = onRetryWebLoad,
+            modifier = Modifier.fillMaxSize(),
+          )
+
+          // Top-Right floating Settings button (avoids website's built-in left menu)
           Surface(
             onClick = onOpenSettings,
             shape = CircleShape,
-            color = PureWhite.copy(alpha = 0.95f),
-            shadowElevation = 5.dp,
-            border = BorderStroke(1.dp, BrandBlueSoftContainer),
-            modifier = Modifier.size(48.dp).testTag("settings_button"),
+            color = PureWhite.copy(alpha = 0.96f),
+            shadowElevation = 6.dp,
+            border = BorderStroke(1.dp, BrandBlueBorder),
+            modifier =
+              Modifier.align(Alignment.TopEnd)
+                .padding(top = 10.dp, end = 12.dp)
+                .size(48.dp)
+                .testTag("settings_button"),
           ) {
             Box(contentAlignment = Alignment.Center) {
               Icon(
@@ -109,32 +130,11 @@ fun MailSeptianApp(
               )
             }
           }
-
-          if (uiState.deviceIntegrityReport.hasAnyWarning) {
-            Spacer(modifier = Modifier.width(10.dp))
-            SecurityWarningBanner(
-              report = uiState.deviceIntegrityReport,
-              expanded = uiState.isWarningExpanded,
-              onToggleExpand = onToggleWarningExpanded,
-              modifier = Modifier.weight(1f),
-            )
-          }
         }
       }
-    } else if (!uiState.showSplash) {
-      // 2. App Lock Gate
-      AppLockScreen(
-        appLockState = uiState.appLockState,
-        authErrorMessage = uiState.authErrorMessage,
-        deviceIntegrityReport = uiState.deviceIntegrityReport,
-        onUnlockClick = onTriggerBiometricUnlock,
-        onOpenDeviceSecuritySettings = onOpenDeviceSecuritySettings,
-        onRecheckCapability = onRecheckLockCapability,
-        onContinueWithoutCredential = onContinueWithoutCredential,
-      )
     }
 
-    // 3. Brief Branded Splash Screen
+    // Brief Branded Splash Screen
     AnimatedVisibility(
       visible = uiState.showSplash,
       enter = fadeIn(),
@@ -143,8 +143,8 @@ fun MailSeptianApp(
       SplashOverlay()
     }
 
-    // 4. Settings Sheet (only Anti Screenshot ON/OFF is editable)
-    if (uiState.isSettingsOpen) {
+    // Settings Sheet (only editable when device is clean and unlocked)
+    if (uiState.isSettingsOpen && !uiState.deviceIntegrityReport.hasAnyWarning) {
       SettingsSheet(
         antiScreenshotEnabled = uiState.antiScreenshotEnabled,
         deviceIntegrityReport = uiState.deviceIntegrityReport,

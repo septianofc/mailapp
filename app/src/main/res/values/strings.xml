@@ -9,27 +9,34 @@
     <string name="cd_open_settings">Buka pengaturan keamanan</string>
     <string name="cd_brand_logo">Logo Mail Septian Support</string>
     <string name="settings_title">Pengaturan Keamanan</string>
-    <string name="settings_subtitle">Konfigurasi perlindungan tampilan aplikasi</string>
+    <string name="settings_subtitle">Perlindungan layar &amp; status integritas perangkat</string>
     <string name="anti_screenshot_title">Anti Screenshot</string>
-    <string name="anti_screenshot_desc">Aktifkan FLAG_SECURE untuk mencegah tangkapan layar, perekaman layar, dan pratinjau di Recent Apps.</string>
+    <string name="anti_screenshot_desc">Mengaktifkan FLAG_SECURE untuk memblokir tangkapan layar, perekaman layar, dan pratinjau Recent Apps.</string>
     <string name="status_on">AKTIF</string>
     <string name="status_off">NONAKTIF</string>
 
-    <!-- Device Integrity Warnings -->
+    <!-- Device Integrity & Blocked Page -->
     <string name="security_status_section_title">Deteksi Integritas Perangkat (Otomatis)</string>
     <string name="security_disclaimer">Catatan: Deteksi root, Magisk, superuser, Developer Options, dan USB Debugging bersifat heuristik dan tidak menjamin akurasi 100%%.</string>
-    <string name="warning_banner_title">Peringatan Keamanan Perangkat</string>
-    <string name="warning_banner_body">Terdeteksi kondisi berisiko pada perangkat: %1$s. Harap berhati-hati saat memasukkan kredensial sensitif.</string>
+    <string name="blocked_title">Akses Aplikasi Diblokir</string>
+    <string name="blocked_subtitle">Dilarang Menggunakan Aplikasi</string>
+    <string name="blocked_description">Demi keamanan sesi Mail Septian Support, aplikasi tidak dapat digunakan selama perangkat terdeteksi dalam kondisi berikut:</string>
+    <string name="blocked_action_hint">Matikan Opsi Pengembang dan USB Debugging di Pengaturan Perangkat, atau gunakan perangkat resmi yang tidak di-root.</string>
+    <string name="blocked_open_settings">Buka Pengaturan Perangkat</string>
+    <string name="blocked_recheck">Periksa Ulang Status</string>
+    <string name="blocked_exit_app">Keluar Aplikasi</string>
+
     <string name="flag_root_magisk">Root / Magisk / Superuser</string>
-    <string name="flag_dev_options">Developer Options Aktif</string>
-    <string name="flag_usb_debugging">USB Debugging Aktif</string>
-    <string name="status_clean">Tidak Terdeteksi</string>
+    <string name="flag_dev_options">Mode Opsi Pengembang Aktif</string>
+    <string name="flag_usb_debugging">Mode USB Debugging Aktif</string>
+    <string name="status_clean">Aman</string>
     <string name="status_detected">Terdeteksi</string>
 
     <!-- App Lock -->
     <string name="applock_title">Aplikasi Terkunci</string>
-    <string name="applock_subtitle">Verifikasi identitas menggunakan biometrik atau kunci layar perangkat (PIN, Pola, atau Sandi) untuk membuka Mail Septian Support.</string>
+    <string name="applock_subtitle">Verifikasi biometrik atau kunci layar perangkat (PIN, Pola, atau Sandi) untuk membuka Mail Septian Support. Membatalkan akan menutup aplikasi.</string>
     <string name="applock_button_unlock">Buka Kunci Sekarang</string>
+    <string name="applock_button_exit">Keluar Aplikasi</string>
     <string name="applock_prompt_title">Autentikasi Mail Septian Support</string>
     <string name="applock_prompt_subtitle">Gunakan biometrik atau kunci layar perangkat Anda</string>
     <string name="applock_no_credential_title">Kunci Layar Perangkat Belum Diatur</string>
@@ -39,18 +46,21 @@
     <string name="applock_continue_unprotected">Lanjutkan (Tanpa Kunci Layar)</string>
     <string name="applock_error_prefix">Autentikasi gagal: %1$s</string>
 
-    <!-- WebView States -->
+    <!-- WebView States (never expose raw URLs in error descriptions) -->
     <string name="webview_loading">Memuat halaman aman…</string>
-    <string name="webview_error_title">Gagal Memuat Halaman</string>
+    <string name="webview_reloading">Menghubungkan kembali…</string>
+    <string name="webview_error_title">Koneksi Bermasalah</string>
+    <string name="webview_error_disconnected">Tidak ada koneksi internet. Periksa Wi-Fi atau data seluler Anda, lalu tekan Muat Ulang.</string>
+    <string name="webview_error_timeout">Waktu koneksi habis. Pastikan jaringan Anda stabil lalu coba kembali.</string>
+    <string name="webview_error_generic">Halaman tidak dapat dimuat saat ini karena gangguan jaringan atau server.</string>
     <string name="webview_error_retry">Muat Ulang</string>
     <string name="webview_ssl_error_title">Sertifikat SSL Tidak Valid</string>
     <string name="webview_ssl_error_desc">Koneksi diblokir karena sertifikat SSL/TLS tidak lolos validasi keamanan ketat. Jangan lanjutkan pada jaringan yang tidak tepercaya.</string>
-    <string name="webview_blocked_url_message">Navigasi diblokir: hanya HTTPS ke septianfr.web.id yang diizinkan.</string>
+    <string name="webview_blocked_url_message">Navigasi diblokir: hanya HTTPS ke layanan resmi yang diizinkan.</string>
 
     <!-- App Info -->
     <string name="about_section_title">Informasi Aplikasi &amp; Proteksi</string>
-    <string name="about_host_value">https://septianfr.web.id</string>
+    <string name="about_host_value">HTTPS Terverifikasi</string>
     <string name="about_apk_protection">Rilis APK menggunakan R8 minification &amp; obfuscation serta penonaktifan log debug. Proteksi ini meningkatkan ketahanan analisis statis, namun tidak membuat APK mustahil didecompile.</string>
     <string name="close">Tutup</string>
-    <string name="details">Detail</string>
 </resources>

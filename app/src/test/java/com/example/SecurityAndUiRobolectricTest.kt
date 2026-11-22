@@ -17,7 +17,7 @@ import com.example.ui.AppLockState
 import com.example.ui.MainUiState
 import com.example.ui.MainViewModel
 import com.example.ui.components.AppLockScreen
-import com.example.ui.components.SecurityWarningBanner
+import com.example.ui.components.SecurityBlockedScreen
 import com.example.ui.components.SettingsSheet
 import com.example.ui.theme.MailSeptianSupportTheme
 import kotlinx.coroutines.Dispatchers
@@ -133,42 +133,48 @@ class SecurityAndUiRobolectricTest {
   }
 
   @Test
-  fun `security warning banner renders when risk detected`() {
-    var expanded = false
+  fun `security blocked screen renders and supports exit and recheck when risk detected`() {
+    var recheckClicked = false
+    var exitClicked = false
     composeTestRule.setContent {
       MailSeptianSupportTheme {
-        SecurityWarningBanner(
+        SecurityBlockedScreen(
           report =
             DeviceIntegrityReport(
               isRootOrMagiskSuspected = true,
               rootSignals = listOf("Binary/path su atau Magisk"),
+              isDeveloperOptionsEnabled = true,
               isUsbDebuggingEnabled = true,
             ),
-          expanded = expanded,
-          onToggleExpand = { expanded = !expanded },
+          onOpenDeviceSettings = {},
+          onRecheckSecurity = { recheckClicked = true },
+          onExitApp = { exitClicked = true },
         )
       }
     }
     composeTestRule.waitForIdle()
 
-    composeTestRule.onNodeWithTag("security_warning_banner").assertIsDisplayed()
-    composeTestRule.onNodeWithTag("security_warning_banner").performClick()
-    assertTrue(expanded)
+    composeTestRule.onNodeWithTag("security_blocked_screen").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("blocked_recheck_button").performClick()
+    composeTestRule.onNodeWithTag("blocked_exit_button").performClick()
+    assertTrue(recheckClicked)
+    assertTrue(exitClicked)
   }
 
   @Test
-  fun `applock screen shows unlock action when locked`() {
+  fun `applock screen shows unlock and exit actions when locked`() {
     var unlockClicked = false
+    var exitClicked = false
     composeTestRule.setContent {
       MailSeptianSupportTheme {
         AppLockScreen(
           appLockState = AppLockState.Locked,
           authErrorMessage = null,
-          deviceIntegrityReport = DeviceIntegrityReport(),
           onUnlockClick = { unlockClicked = true },
           onOpenDeviceSecuritySettings = {},
           onRecheckCapability = {},
           onContinueWithoutCredential = {},
+          onExitApp = { exitClicked = true },
         )
       }
     }
@@ -176,7 +182,9 @@ class SecurityAndUiRobolectricTest {
 
     composeTestRule.onNodeWithTag("app_lock_screen").assertIsDisplayed()
     composeTestRule.onNodeWithTag("unlock_biometric_button").assertIsDisplayed().performClick()
+    composeTestRule.onNodeWithTag("applock_exit_button").assertIsDisplayed().performClick()
     assertTrue(unlockClicked)
+    assertTrue(exitClicked)
   }
 
   @Test

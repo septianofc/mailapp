@@ -51,6 +51,7 @@ object AppLockManager {
     title: String,
     subtitle: String,
     onSuccess: () -> Unit,
+    onCancelExit: () -> Unit,
     onError: (String) -> Unit,
     onFinished: () -> Unit,
   ) {
@@ -66,11 +67,14 @@ object AppLockManager {
         override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
           super.onAuthenticationError(errorCode, errString)
           onFinished()
-          if (
-            errorCode != BiometricPrompt.ERROR_USER_CANCELED &&
-              errorCode != BiometricPrompt.ERROR_CANCELED
-          ) {
-            onError(errString.toString())
+          when (errorCode) {
+            BiometricPrompt.ERROR_USER_CANCELED,
+            BiometricPrompt.ERROR_CANCELED,
+            BiometricPrompt.ERROR_NEGATIVE_BUTTON -> {
+              // User canceled system PIN/Fingerprint prompt -> exit the APK immediately
+              onCancelExit()
+            }
+            else -> onError(errString.toString())
           }
         }
 

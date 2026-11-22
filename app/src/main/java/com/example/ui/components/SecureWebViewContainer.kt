@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.net.http.SslError
 import android.os.Build
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.SslErrorHandler
@@ -18,8 +19,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,6 +41,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -54,6 +56,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -64,10 +67,12 @@ import com.example.R
 import com.example.security.SafeLogger
 import com.example.security.WebViewUrlPolicy
 import com.example.ui.WebErrorState
+import com.example.ui.theme.BrandBlueBorder
 import com.example.ui.theme.BrandBlueDark
 import com.example.ui.theme.BrandBluePrimary
 import com.example.ui.theme.BrandBlueSoftContainer
 import com.example.ui.theme.PureWhite
+import com.example.ui.theme.SecurityDangerBorder
 import com.example.ui.theme.SecurityDangerRed
 import com.example.ui.theme.SecurityDangerRedContainer
 import com.example.ui.theme.SoftWhiteBackground
@@ -90,10 +95,19 @@ fun SecureWebViewContainer(
   onRetry: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  val context = LocalContext.current
   var webViewRef by remember { mutableStateOf<WebView?>(null) }
   var canGoBack by remember { mutableStateOf(false) }
 
+  // Keeps WebView visually masked while recovering from an error so Chromium's
+  // built-in error page (which exposes the URL) is never shown during reload.
+  var isPageVisible by remember { mutableStateOf(false) }
+  var currentLoadHadError by remember { mutableStateOf(false) }
+
   val blockedMessage = stringResource(id = R.string.webview_blocked_url_message)
+  val disconnectedMsg = stringResource(id = R.string.webview_error_disconnected)
+  val timeoutMsg = stringResource(id = R.string.webview_error_timeout)
+  val genericErrorMsg = stringResource(id = R.string.webview_error_generic)
 
   BackHandler(enabled = canGoBack) {
     webViewRef?.let { webView ->
@@ -106,9 +120,16 @@ fun SecureWebViewContainer(
   LaunchedEffect(reloadTrigger) {
     if (reloadTrigger > 0) {
       webViewRef?.let { webView ->
+        isPageVisible = false
+        currentLoadHadError = false
+        webView.visibility = View.INVISIBLE
+        val lastUrl = webView.url
         val target =
-          webView.url?.takeIf { WebViewUrlPolicy.isAllowedNavigationUrl(it) }
-            ?: WebViewUrlPolicy.ENTRY_URL
+          if (lastUrl != null && WebViewUrlPolicy.isAllowedNavigationUrl(lastUrl)) {
+            lastUrl
+          } else {
+            WebViewUrlPolicy.ENTRY_URL
+          }
         webView.loadUrl(target)
       }
     }
@@ -135,14 +156,15 @@ fun SecureWebViewContainer(
   Box(modifier = modifier.fillMaxSize().background(PureWhite).testTag("secure_webview_container")) {
     AndroidView(
       modifier = Modifier.fillMaxSize().testTag("mail_septian_webview"),
-      factory = { context ->
+      factory = { ctx ->
         WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
-        WebView(context).apply {
+        WebView(ctx).apply {
           layoutParams =
             ViewGroup.LayoutParams(
               ViewGroup.LayoutParams.MATCH_PARENT,
               ViewGroup.LayoutParams.MATCH_PARENT,
             )
+          visibility = View.INVISIBLE
 
           configureHardenedSettings(this)
           configureSecureCookies(this)
@@ -191,19 +213,32 @@ fun SecureWebViewContainer(
               }
 
               override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                if (url == "about:blank") {
+                  return
+                }
                 if (!WebViewUrlPolicy.isAllowedNavigationUrl(url)) {
                   view?.stopLoading()
                   onNavigationBlocked(blockedMessage)
                   return
                 }
+                currentLoadHadError = false
                 canGoBack = view?.canGoBack() == true
                 onPageStarted()
               }
 
               override fun onPageFinished(view: WebView?, url: String?) {
+                if (url == "about:blank") {
+                  view?.visibility = View.INVISIBLE
+                  isPageVisible = false
+                  return
+                }
                 canGoBack = view?.canGoBack() == true
                 CookieManager.getInstance().flush()
-                onPageFinished()
+                if (!currentLoadHadError) {
+                  view?.visibility = View.VISIBLE
+                  isPageVisible = true
+                  onPageFinished()
+                }
               }
 
               override fun onReceivedError(
@@ -212,12 +247,25 @@ fun SecureWebViewContainer(
                 error: WebResourceError?,
               ) {
                 if (request?.isForMainFrame == true) {
-                  val desc = error?.description?.toString().orEmpty()
-                  val code = error?.errorCode ?: -1
-                  SafeLogger.w("WebView main-frame network error code=$code")
-                  onNetworkError(
-                    if (desc.isNotBlank()) "$desc (Kode $code)" else "Koneksi jaringan terganggu ($code)"
-                  )
+                  currentLoadHadError = true
+                  isPageVisible = false
+                  view?.visibility = View.INVISIBLE
+                  view?.stopLoading()
+                  view?.loadUrl("about:blank")
+
+                  val errorCode = error?.errorCode ?: ERROR_UNKNOWN
+                  val rawDesc = error?.description?.toString().orEmpty()
+                  SafeLogger.w("WebView main-frame network error code=$errorCode")
+
+                  val friendlyMessage =
+                    mapFriendlyErrorMessage(
+                      errorCode = errorCode,
+                      rawDescription = rawDesc,
+                      disconnectedMsg = disconnectedMsg,
+                      timeoutMsg = timeoutMsg,
+                      genericMsg = genericErrorMsg,
+                    )
+                  onNetworkError(friendlyMessage)
                 }
               }
 
@@ -228,6 +276,11 @@ fun SecureWebViewContainer(
               ) {
                 // Strictly refuse untrusted SSL certificates — NEVER call handler.proceed()
                 handler?.cancel()
+                currentLoadHadError = true
+                isPageVisible = false
+                view?.visibility = View.INVISIBLE
+                view?.stopLoading()
+                view?.loadUrl("about:blank")
                 SafeLogger.w("Strict SSL validation rejected certificate error=${error?.primaryError}")
                 onSslError()
               }
@@ -237,8 +290,39 @@ fun SecureWebViewContainer(
           webViewRef = this
         }
       },
-      update = { webView -> webViewRef = webView },
+      update = { webView ->
+        webViewRef = webView
+        webView.visibility =
+          if (isPageVisible && webErrorState is WebErrorState.None) View.VISIBLE else View.INVISIBLE
+      },
     )
+
+    // Opaque loading veil before initial render or while reconnecting after error
+    AnimatedVisibility(
+      visible = !isPageVisible && webErrorState is WebErrorState.None,
+      enter = fadeIn(),
+      exit = fadeOut(),
+      modifier = Modifier.fillMaxSize(),
+    ) {
+      Box(
+        modifier = Modifier.fillMaxSize().background(PureWhite),
+        contentAlignment = Alignment.Center,
+      ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+          CircularProgressIndicator(
+            color = BrandBluePrimary,
+            trackColor = BrandBlueSoftContainer,
+            modifier = Modifier.size(40.dp),
+          )
+          Spacer(modifier = Modifier.height(14.dp))
+          Text(
+            text = context.getString(R.string.webview_loading),
+            style = MaterialTheme.typography.bodyMedium,
+            color = BrandBlueDark,
+          )
+        }
+      }
+    }
 
     // Slim top progress indicator while loading
     AnimatedVisibility(
@@ -278,7 +362,7 @@ fun SecureWebViewContainer(
       }
     }
 
-    // Full error overlay for network or strict SSL validation errors
+    // Full error overlay for network or strict SSL validation errors (never displays URL)
     if (webErrorState !is WebErrorState.None) {
       WebErrorOverlay(
         errorState = webErrorState,
@@ -289,9 +373,28 @@ fun SecureWebViewContainer(
   }
 }
 
+private fun mapFriendlyErrorMessage(
+  errorCode: Int,
+  rawDescription: String,
+  disconnectedMsg: String,
+  timeoutMsg: String,
+  genericMsg: String,
+): String {
+  val descUpper = rawDescription.uppercase()
+  return when {
+    errorCode == WebViewClient.ERROR_HOST_LOOKUP ||
+      errorCode == WebViewClient.ERROR_CONNECT ||
+      descUpper.contains("DISCONNECTED") ||
+      descUpper.contains("NAME_NOT_RESOLVED") ||
+      descUpper.contains("ADDRESS_UNREACHABLE") ||
+      descUpper.contains("NETWORK_CHANGED") -> disconnectedMsg
+    errorCode == WebViewClient.ERROR_TIMEOUT || descUpper.contains("TIMED_OUT") -> timeoutMsg
+    else -> genericMsg
+  }
+}
+
 @SuppressLint("SetJavaScriptEnabled")
 private fun configureHardenedSettings(webView: WebView) {
-  // Defense in depth: remove legacy default JS bridges and never attach custom JS interfaces
   webView.removeJavascriptInterface("searchBoxJavaBridge_")
   webView.removeJavascriptInterface("accessibility")
   webView.removeJavascriptInterface("accessibilityTraversal")
@@ -301,7 +404,6 @@ private fun configureHardenedSettings(webView: WebView) {
     javaScriptCanOpenWindowsAutomatically = false
     setSupportMultipleWindows(false)
 
-    // Strict file/content/mixed-content hardening
     allowFileAccess = false
     allowContentAccess = false
     @Suppress("DEPRECATION")
@@ -310,15 +412,14 @@ private fun configureHardenedSettings(webView: WebView) {
     allowUniversalAccessFromFileURLs = false
     mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
 
-    // Session & storage hygiene
     domStorageEnabled = true
+    @Suppress("DEPRECATION")
     databaseEnabled = false
     setGeolocationEnabled(false)
     @Suppress("DEPRECATION")
     saveFormData = false
     cacheMode = WebSettings.LOAD_DEFAULT
 
-    // Viewport ergonomics
     useWideViewPort = true
     loadWithOverviewMode = true
     builtInZoomControls = false
@@ -351,10 +452,12 @@ private fun WebErrorOverlay(
       shape = RoundedCornerShape(24.dp),
       colors = CardDefaults.cardColors(containerColor = PureWhite),
       elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
-      modifier =
-        Modifier.widthIn(max = 420.dp)
-          .fillMaxWidth()
-          .border(1.dp, BrandBlueSoftContainer, RoundedCornerShape(24.dp)),
+      border =
+        BorderStroke(
+          1.dp,
+          if (isSslError) SecurityDangerBorder else BrandBlueBorder.copy(alpha = 0.6f),
+        ),
+      modifier = Modifier.widthIn(max = 420.dp).fillMaxWidth(),
     ) {
       Column(
         horizontalAlignment = Alignment.CenterHorizontally,
